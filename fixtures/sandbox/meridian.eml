@@ -1,0 +1,23 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=alerts.meridianbank.example; s=sb1; t=1794045660; h=from:to:subject:date:message-id:mime-version:content-type; bh=JHdZJKwo+gEc0J2qxSfc4lEuvXKh2ZnOWZYxCCDrARc=; b=QCGeq1OOyj5MmsVSDt9/ozi13DBchQjGL5X30KXg4FXW0JrzlgE+RAvzorUQ3+Gqmf1GpsFKcabmDRn84Kj6Tk16Yb9h0IE6eAQddgu50Mka9hno8IKePzz2kbGGnLtpq62H8j6EeXbNDbw61gVNSzYj+yTca6dul9H/ErI40rELuRGRLyo+WJDArZxGxSeyGT6A1ZMEPGIe31YlHhb+JlZM8Po3FYSdI4tsOrk8p0Q1QgRi9mX249s4WSySYN7fU2EZ//JOEjbZ+zZZvaYP8yFxIr52w0IWRH7WYaEsdE+DcJzspRQ3gmvRKwENjKjC3MJ6BQ24xzWOs2ArFKJVrg==
+From: Meridian Bank <noreply@alerts.meridianbank.example>
+To: <buyer@mail.example>
+Subject: Debit alert: your UPI payment
+Date: Sat, 07 Nov 2026 10:01:00 +0000
+Message-ID: <1794045660.608802653663@alerts.meridianbank.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hello,
+
+Your UPI payment has been processed.
+
+Amount: Rs. 8,850.37
+Currency: INR
+Status: Successful
+Type: Debit
+To: asha.rao@meridian
+Reference: 608802653663
+Note: order 3
+Available balance: Rs. 42,310.05
+
+This is an automated message from Meridian Bank.

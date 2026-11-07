@@ -1,0 +1,23 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=service.rheinbank.example; s=sb1; t=1794045660; h=from:to:subject:date:message-id:mime-version:content-type; bh=4H38bqWygAdzSdEhpdW1ZGhL8c20aUXiVU/YRLpkHIg=; b=RpbYYbxAudIC+d2OvmGrLlp5imk5cHIULgF4qNJbXAoYIMT9c6tApbB6FwvArIDyYPlR0a8JDoe09RI29Wg4JcXcCqyGypyA9H7eyrRBoXY0zIoJM+hnSXhtVged4Gcn+3aQHutD20oIjbY/A9IQ7kVWcZZ4FWmkWZtZgND3lWyZiLykOmPmhpU8B1K4xETispaFZn+Fgdq1krmD14flhararuTxwe8UL5s8vfEi31HyK3iyjxQqrfItUFAJbEsaYGNiyjLpH5w7H4tx5vCDGlwIe8CBkgXrhG0w9RSZCJIQXZEhkec3NFkHbuFGFIcVE4RRaafCfx6TlgEQrJppnA==
+From: Rheinbank <noreply@service.rheinbank.example>
+To: <buyer@mail.example>
+Subject: =?UTF-8?B?SWhyZSBTRVBBLUVjaHR6ZWl0w7xiZXJ3ZWlzdW5n?=
+Date: Sat, 07 Nov 2026 10:01:00 +0000
+Message-ID: <1794045660.608802653663@service.rheinbank.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Guten Tag,
+
+Ihre Überweisung wurde ausgeführt.
+
+Betrag: 8.850,37 EUR
+Währung: EUR
+Status: Ausgeführt
+Art: Lastschrift
+An: asha.rao@meridian
+Referenz: 608802653663
+Verwendungszweck: order 3
+Verfügbarer Saldo: 42.310,05 EUR
+
+Automatische Nachricht der Rheinbank.

@@ -1,0 +1,23 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=avisos.bancoaurora.example; s=sb1; t=1794045660; h=from:to:subject:date:message-id:mime-version:content-type; bh=wi2XYF9k1cGOHSx3McQiZuKn5BYtu4If4w8m2kW2His=; b=SXPeW8umbt+JvMIe0Jsuxk+0WtzLgB3uceCFSOrDtXmcfu/DHvPutMWQGGoZG5O43FN1K3sjCzUD8QPaCk2Z80+pQPk45AbNOh0i7YmaSFUNXihpx2LKLhNDNqN2w1QI/1uyXkpU5hZ2bmjAD64li11F5V+ys2iXvWH+LCDKczLHDO6hnQUl2UEP9XEiErNS0sOmTL1NpKPo4AHotMdrzvBIMa5G9k/gc4uK0hiuhKyZGyFsPA7RCmpARzhp02Lt4RjhkBDQOxohNq0rvWMiMkCdbnaE0dEwLFc2lr/UIyKLrFOXRm3k7EHWeoGhjgBRDnv2k4luGSSWqiZclq3sVQ==
+From: Banco Aurora <noreply@avisos.bancoaurora.example>
+To: <buyer@mail.example>
+Subject: Comprovante do seu Pix
+Date: Sat, 07 Nov 2026 10:01:00 +0000
+Message-ID: <1794045660.608802653663@avisos.bancoaurora.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Olá,
+
+Seu Pix foi enviado.
+
+Valor: R$ 8.850,37
+Moeda: BRL
+Situação: Concluído
+Tipo: Débito
+Para: asha.rao@meridian
+Identificador: 608802653663
+Mensagem: order 3
+Saldo disponível: R$ 42.310,05
+
+Mensagem automática do Banco Aurora.
