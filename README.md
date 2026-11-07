@@ -146,7 +146,7 @@ BT_CONTRACT=teller.youraccount.testnet cargo build -p blind-teller-enclave --tar
 cd web && BT_ROOT=youraccount.testnet npx tsx scripts/deploy.ts
 ```
 
-To turn on the real models, set `NEAR_AI_API_KEY` in your environment and run `scripts/set-model-key.ts`. Never put the key in a file.
+To turn on the real models, run `npx tsx scripts/set-model-key.ts` in `web` and paste your NEAR AI key at the hidden prompt. It encrypts the key to OutLayer's keystore. Never put the key in a file.
 
 ## Deployed on testnet
 
