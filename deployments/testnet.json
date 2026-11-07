@@ -1,0 +1,24 @@
+{
+  "network": "testnet",
+  "teller": "teller.blindteller.testnet",
+  "registry": "models.blindteller.testnet",
+  "token": "usdc.fakes.testnet",
+  "enclave": {
+    "project": "blindteller.testnet/teller",
+    "wasm_sha256": "a90bb9b9ea8f3a36581133e6a7dc0f876bedf512cdb1fbdb3bcc46aad7e35943",
+    "url": "https://test.fastfs.io/blindteller.testnet/outlayer.testnet/a90bb9b9ea8f3a36581133e6a7dc0f876bedf512cdb1fbdb3bcc46aad7e35943.wasm"
+  },
+  "keys": {
+    "extractor": "dev-allowed",
+    "models": [
+      "z-ai/glm-5.3-flash",
+      "Qwen/Qwen3.8-27B"
+    ],
+    "policy_hash": "c651f24aaf6398a2729072d0837bf8e698dfb5f433cc79d8a4914ca9662fdd9d",
+    "seal_public": "7ae2e0681165291e363181346715f0eb6d572ef73aeea235f700585bdff19157",
+    "signature": "b3fe35fb44fa9ce94d21ec712a5832fb5f5da2dca9d79adf6a9a53d0490d4cc958628d5ba6e58a0a6568956f69fbc2244b97f9bdcd927d37e55cf6e86e434505",
+    "verdict_public": "36c386858dba34c5ad3ef60632758179c72dc9f84a937a5eb6e4f23dae7ec564",
+    "version": "0.1.0"
+  },
+  "tee_verifier": "tee-verifier-2026-11-02.testnet"
+}

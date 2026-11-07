@@ -5,14 +5,13 @@
 //
 // Needs: `blindteller.testnet` (or BT_ROOT) in the NEAR CLI's legacy keychain.
 
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { base58Encode, send, TGAS, view } from '../src/lib/near';
-import { concat, fromHex, randomBytes, toBase64, utf8 } from '../src/lib/bytes';
+import { accountInfo, base58Encode, send, TGAS, view } from '../src/lib/near';
+import { concat, fromHex, hex, randomBytes, utf8 } from '../src/lib/bytes';
 import { payeeAad } from '../src/lib/canonical';
-import { publicOf, seal } from '../src/lib/seal';
+import { seal } from '../src/lib/seal';
 import { DEMO, OUTLAYER_API } from '../src/config';
 import { callEnclave } from '../src/lib/teller';
 import { BANKS } from '../src/sandbox/banks';
@@ -31,14 +30,7 @@ const save = () => {
 
 const root = () => signerFor(ROOT_ACCOUNT);
 
-async function exists(account: string): Promise<boolean> {
-  try {
-    near('account', 'view-account-summary', account, 'network-config', 'testnet', 'now');
-    return true;
-  } catch {
-    return false;
-  }
-}
+const exists = async (account: string) => (await accountInfo(account)) !== null;
 
 async function subaccount(account: string, funding: string) {
   if (await exists(account)) return log('exists', account);
@@ -46,15 +38,16 @@ async function subaccount(account: string, funding: string) {
   log('created', account);
 }
 
-async function codeHash(account: string): Promise<string> {
-  const out = near('contract', 'inspect', account, 'network-config', 'testnet', 'now');
-  return out.match(/SHA-256 checksum \[hex\]\s+([0-9a-f]{64})/)?.[1] ?? '';
+/** True when the account has a contract on it. */
+async function hasCode(account: string): Promise<boolean> {
+  const info = await accountInfo(account);
+  return !!info && info.code_hash !== '11111111111111111111111111111111';
 }
 
 function deploy(account: string, wasm: string, init: { method: string; args: object } | null) {
   const base = ['contract', 'deploy', account, 'use-file', wasm];
   const tail = ['network-config', 'testnet', 'sign-with-legacy-keychain', 'send'];
-  if (init) near(...base, 'with-init-call', init.method, 'json-args', JSON.stringify(init.args).replace(/"/g, '\\"'), 'prepaid-gas', '100 Tgas', 'attached-deposit', '0 NEAR', ...tail);
+  if (init) near(...base, 'with-init-call', init.method, 'json-args', JSON.stringify(init.args), 'prepaid-gas', '100 Tgas', 'attached-deposit', '0 NEAR', ...tail);
   else near(...base, 'without-init-call', ...tail);
 }
 
@@ -111,7 +104,7 @@ async function ensureSecretRow() {
 async function ensurePaymentKey() {
   if (!state.paymentKey) {
     const nonce = await view<number>(OUTLAYER, 'get_next_payment_key_nonce', { account_id: ROOT_ACCOUNT });
-    const key = toBase64(randomBytes(32));
+    const key = hex(randomBytes(32));
     const blob = JSON.stringify({ key, initial_balance: '0', project_ids: [`${ROOT_ACCOUNT}/${PROJECT}`], max_per_call: '50000' });
     const pub = await keystoreKey({ type: 'System', PaymentKey: {} }, ROOT_ACCOUNT, String(nonce));
     await send(root(), OUTLAYER, {
@@ -152,7 +145,7 @@ async function deployTeller(keys: { seal_public: string; verdict_public: string 
     allow_dev: process.env.BT_ALLOW_DEV !== 'false',
     fee_bps: 25,
   };
-  if (await codeHash(TELLER_ACCOUNT)) {
+  if (await hasCode(TELLER_ACCOUNT)) {
     deploy(TELLER_ACCOUNT, TELLER_WASM, null);
     await send(root(), TELLER_ACCOUNT, { method: 'set_enclave_keys', args: { verdict_key: keys.verdict_public, seal_key: keys.seal_public }, gas: 30n * TGAS });
     log('updated teller');
@@ -202,7 +195,7 @@ async function demoBuyerKey() {
   const pub = ed25519.getPublicKey(seed);
   const secretKey = `ed25519:${base58Encode(concat(seed, pub))}`;
   const pk = `ed25519:${base58Encode(pub)}`;
-  near('account', 'add-key', BUYER_ACCOUNT, 'grant-function-call-access', '--allowance', '2 NEAR', '--contract-account-id', TELLER_ACCOUNT, '--function-names', 'take_offer,settle', 'use-manually-provided-public-key', pk, 'network-config', 'testnet', 'sign-with-legacy-keychain', 'send');
+  near('account', 'add-key', BUYER_ACCOUNT, 'grant-function-call-access', '--allowance', '0.3 NEAR', '--contract-account-id', TELLER_ACCOUNT, '--function-names', 'take_offer,settle', 'use-manually-provided-public-key', pk, 'network-config', 'testnet', 'sign-with-legacy-keychain', 'send');
   state.demoKey = secretKey;
   save();
   log('added the demo key', pk);
@@ -210,6 +203,7 @@ async function demoBuyerKey() {
 
 function writeClientConfig() {
   const demo = { buyerAccount: BUYER_ACCOUNT, buyerKey: state.demoKey, paymentKey: state.paymentKey };
+  mkdirSync(join(REPO, 'web/public'), { recursive: true });
   writeFileSync(join(REPO, 'web/public/demo.json'), JSON.stringify(demo, null, 2));
   const pub = {
     network: 'testnet',
@@ -225,12 +219,12 @@ function writeClientConfig() {
 }
 
 async function main() {
-  await subaccount(REGISTRY_ACCOUNT, '2.6');
-  await subaccount(TELLER_ACCOUNT, '3.2');
-  await subaccount(SELLER_ACCOUNT, '0.5');
-  await subaccount(BUYER_ACCOUNT, '2.5');
+  await subaccount(REGISTRY_ACCOUNT, '2.2');
+  await subaccount(TELLER_ACCOUNT, '3');
+  await subaccount(SELLER_ACCOUNT, '0.3');
+  await subaccount(BUYER_ACCOUNT, '0.4');
 
-  if (!(await codeHash(REGISTRY_ACCOUNT))) {
+  if (!(await hasCode(REGISTRY_ACCOUNT))) {
     deploy(REGISTRY_ACCOUNT, REGISTRY_WASM, { method: 'new', args: { verifier: TEE_VERIFIER } });
     log('deployed registry');
   }
@@ -264,5 +258,3 @@ main().catch((e) => {
   process.exit(1);
 });
 
-void execFileSync;
-void publicOf;

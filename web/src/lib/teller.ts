@@ -143,7 +143,8 @@ export async function callEnclave(input: object): Promise<EnclaveCall> {
   if (!response.ok) throw new Error(body.error ?? body.message ?? `enclave call failed (${response.status})`);
   if (body.status === 'failed' || body.error) throw new Error(String(body.error ?? 'the enclave run failed'));
   const output = typeof body.output === 'string' ? JSON.parse(body.output) : body.output;
-  return { output, callId: body.call_id, attestationUrl: body.attestation_url, ms: performance.now() - started };
+  const attestationUrl = body.attestation_url ? new URL(body.attestation_url, OUTLAYER_API).href : undefined;
+  return { output, callId: body.call_id, attestationUrl, ms: performance.now() - started };
 }
 
 export interface EnclaveKeys {

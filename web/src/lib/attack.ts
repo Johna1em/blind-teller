@@ -59,8 +59,7 @@ export const ATTACKS: Attack[] = [
     expect: 'dkim_signature',
     build: async (amount, payee, at) => {
       const honest = await issueEmail(bank, base(amount, payee, at));
-      const message = honest.slice(honest.indexOf('\r\n') + 2).replace(/^\s/gm, ' ');
-      return dkimSign(message.slice(message.indexOf('From:')), { domain: bank.domain, timestamp: at, pkcs8: await attackerKey() });
+      return dkimSign(honest.slice(honest.indexOf('From:')), { domain: bank.domain, timestamp: at, pkcs8: await attackerKey() });
     },
   },
   {

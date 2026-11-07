@@ -42,8 +42,10 @@ export function base58Encode(b: Uint8Array): string {
 
 async function rpc(method: string, params: unknown): Promise<any> {
   let last: unknown;
-  for (let attempt = 0; attempt < RPC_URLS.length * 2; attempt++) {
+  // Public RPC endpoints rate-limit, so rotate through them and back off.
+  for (let attempt = 0; attempt < RPC_URLS.length * 4; attempt++) {
     const url = RPC_URLS[attempt % RPC_URLS.length];
+    if (attempt > 0) await new Promise((r) => setTimeout(r, Math.min(300 * 2 ** Math.floor(attempt / RPC_URLS.length), 4000)));
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -57,7 +59,6 @@ async function rpc(method: string, params: unknown): Promise<any> {
     } catch (e) {
       last = e;
       if ((e as { rpc?: unknown }).rpc) throw e;
-      await new Promise((r) => setTimeout(r, 400));
     }
   }
   throw last;
@@ -73,6 +74,16 @@ export async function view<T>(account: string, method: string, args: object = {}
   });
   if (result.error) throw new Error(result.error);
   return JSON.parse(new TextDecoder().decode(Uint8Array.from(result.result)));
+}
+
+/** An account's summary, or null if it doesn't exist. */
+export async function accountInfo(account: string): Promise<{ amount: string; code_hash: string; storage_usage: number } | null> {
+  try {
+    return await rpc('query', { request_type: 'view_account', finality: 'optimistic', account_id: account });
+  } catch (e) {
+    if (/does not exist|UNKNOWN_ACCOUNT/.test(String((e as Error).message) + JSON.stringify((e as { rpc?: unknown }).rpc ?? ''))) return null;
+    throw e;
+  }
 }
 
 // ---- borsh, for the one transaction shape this app sends ----

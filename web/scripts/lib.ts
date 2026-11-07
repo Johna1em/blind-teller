@@ -41,7 +41,7 @@ export function signerFor(account: string): Signer {
 }
 
 export function near(...args: string[]): string {
-  return execFileSync('near', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 16 * 1024 * 1024, shell: process.platform === 'win32' });
+  return execFileSync(process.platform === 'win32' ? 'near.exe' : 'near', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 16 * 1024 * 1024 });
 }
 
 /**

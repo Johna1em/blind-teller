@@ -62,10 +62,9 @@ async function attest(model: string, relayer: ReturnType<typeof signerFor>) {
 
 async function main() {
   const relayer = signerFor(process.env.BT_RELAYER ?? ROOT_ACCOUNT);
-  const results = await Promise.all(MODELS.map(async (m, i) => {
-    await new Promise((r) => setTimeout(r, i * 3000));
-    return attest(m, relayer);
-  }));
+  // One at a time: two transactions from one key would race on its nonce.
+  const results: boolean[] = [];
+  for (const model of MODELS) results.push(await attest(model, relayer));
   if (!results.every(Boolean)) process.exit(1);
 }
 
