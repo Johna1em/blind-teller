@@ -1,0 +1,22 @@
+[package]
+name = "model-registry"
+description = "Public on-chain registry of NEAR AI Cloud model keys, proven through NEAR's tee-verifier"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
+borsh.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
+
+[package.metadata.near.reproducible_build]
+image = "sourcescan/cargo-near:0.23.0-rust-1.99.1"
+container_build_command = ["cargo", "near", "build", "non-reproducible-wasm", "--locked"]

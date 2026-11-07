@@ -1,0 +1,13 @@
+{
+  "display": { "name": "Blind Teller enclave", "author": "blindteller.testnet" },
+  "capabilities": {
+    "network": [
+      { "host": "cloud-api.near.ai", "timeout_secs": 75 },
+      "dns.google",
+      "cloudflare-dns.com",
+      "rpc.testnet.near.org",
+      "test.rpc.fastnear.com"
+    ]
+  },
+  "signing_keys": [{ "path": "verdict", "type": "ed25519", "caller": "none" }]
+}

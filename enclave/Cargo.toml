@@ -1,0 +1,46 @@
+[package]
+name = "blind-teller-enclave"
+description = "Reads a sealed bank email inside an OutLayer TDX enclave and signs a verdict"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "enclave"
+path = "src/lib.rs"
+
+[[bin]]
+name = "blind-teller-enclave"
+path = "src/main.rs"
+
+[features]
+default = []
+# Sandbox-only regex extractor, so everything but the model call can run before
+# an API key exists. Verdicts it produces are marked `dev-rules`, and a contract
+# deployed without `allow_dev` refuses them.
+dev-extractor = []
+# The real host: OutLayer signing keys and WASI HTTP. Only on wasm32-wasip2.
+wasi = ["dep:outlayer", "dep:wasi-http-client"]
+
+[dependencies]
+teller-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+base64.workspace = true
+sha2.workspace = true
+hkdf = "0.12"
+chacha20poly1305 = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+rsa = { version = "0.9", default-features = false, features = ["std", "sha2"] }
+getrandom = "0.2"
+outlayer = { version = "0.2", features = ["signing-keys"], optional = true }
+wasi-http-client = { version = "0.2", optional = true }
+
+[dev-dependencies]
+rand = "0.8"
+rsa = { version = "0.9", features = ["std", "sha2", "pem"] }
+ed25519-dalek = { version = "2", features = ["std", "rand_core"] }
+serde_json.workspace = true

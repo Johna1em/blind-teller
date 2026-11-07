@@ -1,0 +1,29 @@
+{
+  "terms": {
+    "contract": "teller.blindteller.testnet",
+    "order_id": 7,
+    "offer_id": 2,
+    "seller": "seller.testnet",
+    "buyer": "buyer.testnet",
+    "token": "usdc.fakes.testnet",
+    "token_amount": "100000000",
+    "currency": "INR",
+    "fiat_minor": 885037,
+    "rail": "sandbox-upi",
+    "payee_commit": "abababababababababababababababababababababababababababababababab",
+    "created_ms": 1794000000000,
+    "deadline_ms": 1794001800000
+  },
+  "terms_line": "blind-teller/v1|terms|teller.blindteller.testnet|7|2|seller.testnet|buyer.testnet|usdc.fakes.testnet|100000000|INR|885037|sandbox-upi|abababababababababababababababababababababababababababababababab|1794000000000|1794001800000",
+  "terms_hash": "e9d9d2738f7692f5f94fa303e8645f0a72307b719473738598477d361b88fa19",
+  "verdict_message": "blind-teller/v1|verdict|paid|teller.blindteller.testnet|7|e9d9d2738f7692f5f94fa303e8645f0a72307b719473738598477d361b88fa19|cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|near-ai|1794000100000",
+  "model_keys": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ],
+  "nullifier": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+  "issued_ms": 1794000100000,
+  "email_aad": "blind-teller/v1|email|teller.blindteller.testnet|7",
+  "payee_aad": "blind-teller/v1|payee|teller.blindteller.testnet|seller.testnet",
+  "reveal_aad": "blind-teller/v1|reveal|teller.blindteller.testnet|7"
+}

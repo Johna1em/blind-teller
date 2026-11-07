@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = ["crates/teller-core", "contracts/teller", "contracts/model-registry", "enclave"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/blind-teller/blind-teller"
+
+[workspace.dependencies]
+teller-core = { path = "crates/teller-core" }
+near-sdk = "5.30"
+borsh = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+base64 = "0.22"
+sha2 = "0.10"
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+strip = true
