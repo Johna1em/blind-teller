@@ -9,5 +9,7 @@
       "test.rpc.fastnear.com"
     ]
   },
-  "signing_keys": [{ "path": "verdict", "type": "ed25519", "caller": "none" }]
+  "signing_keys": [{ "path": "verdict", "type": "ed25519", "caller": "none" }],
+  "author_secrets": { "owner": "blindteller.testnet", "profile": "prod" },
+  "callers": { "direct": "deny", "contract": "deny" }
 }

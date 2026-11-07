@@ -125,6 +125,9 @@ pub struct Order {
     pub nullifier: Option<String>,
     pub extractor: Option<String>,
     pub model_keys: Vec<String>,
+    /// The verdict, kept so anyone can re-verify a settled order later.
+    pub verdict_signature: Option<String>,
+    pub verdict_issued_ms: Option<U64>,
     pub settled_ms: Option<U64>,
 }
 
@@ -359,6 +362,8 @@ impl Teller {
             nullifier: None,
             extractor: None,
             model_keys: vec![],
+            verdict_signature: None,
+            verdict_issued_ms: None,
             settled_ms: None,
         };
         self.open_amounts.insert((offer_id.0, fiat_minor));
@@ -410,6 +415,8 @@ impl Teller {
         order.nullifier = Some(verdict.nullifier.clone());
         order.extractor = Some(verdict.extractor.clone());
         order.model_keys = verdict.model_keys.clone();
+        order.verdict_signature = Some(verdict.signature.clone());
+        order.verdict_issued_ms = Some(verdict.issued_ms);
         self.orders.insert(order_id.0, order);
 
         if is_dev {
@@ -442,6 +449,8 @@ impl Teller {
         order.status = OrderStatus::Open;
         order.extractor = None;
         order.model_keys = vec![];
+        order.verdict_signature = None;
+        order.verdict_issued_ms = None;
         self.orders.insert(order_id.0, order);
         event("settle_unwound", serde_json::json!({ "order_id": order_id, "reason": "model key not attested" }));
         PromiseOrValue::Value(false)

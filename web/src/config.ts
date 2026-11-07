@@ -18,20 +18,28 @@ export const ENCLAVE_PROJECT = 'teller';
 export const NEAR_AI_API = 'https://cloud-api.near.ai/v1';
 /** NEAR's proxies for Intel and NVIDIA, which don't allow browser calls. */
 export const NEAR_AI_PCCS = 'https://cloud.near.ai/api/proxy/pccs';
-export const NEAR_AI_NRAS = 'https://cloud.near.ai/api/proxy/nras';
+export const NEAR_AI_NRAS = 'https://cloud.near.ai/api/proxy/nras/v3/attest/gpu';
 
 /** The two TEE-hosted models that read every email. */
 export const MODELS = ['z-ai/glm-5.3-flash', 'Qwen/Qwen3.8-27B'];
 
 /**
- * Written by `scripts/deploy.mjs`. The demo buyer's key can call only
- * `take_offer` and `settle`, so judges can run the flow without a wallet. The
- * payment key pays for enclave runs and can spend only its small balance.
+ * Loaded at runtime from `demo.json`, which ships with the hosted site and isn't
+ * in the repository. The demo buyer's key can call only `take_offer` and
+ * `settle`, so judges can run the flow without a wallet. The payment key pays
+ * for enclave runs and can spend only its small balance on this one project.
  */
 export const DEMO = {
-  buyerAccount: import.meta.env?.VITE_DEMO_BUYER ?? 'buyer.blindteller.testnet',
-  buyerKey: import.meta.env?.VITE_DEMO_BUYER_KEY ?? '',
-  paymentKey: import.meta.env?.VITE_DEMO_PAYMENT_KEY ?? '',
-  /** True while the release enclave is waiting for its API key. */
-  devExtractor: (import.meta.env?.VITE_DEV_EXTRACTOR ?? 'true') === 'true',
+  buyerAccount: 'buyer.blindteller.testnet',
+  buyerKey: '',
+  paymentKey: '',
 };
+
+export async function loadDemo(): Promise<void> {
+  try {
+    const response = await fetch('./demo.json');
+    if (response.ok) Object.assign(DEMO, await response.json());
+  } catch {
+    // The page still reads the chain without it.
+  }
+}

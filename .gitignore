@@ -6,3 +6,4 @@ dist/
 *.local
 .deploy/
 
+web/public/demo.json
