@@ -1,4 +1,4 @@
-export function How() {
+﻿export function How() {
   return (
     <article className="essay">
       <section className="hero hero-small">
@@ -25,12 +25,13 @@ export function How() {
 
       <h2>Why this helps NEAR</h2>
       <p>
-        A fiat ramp brings new users to NEAR Intents from any bank that emails a receipt, including the currencies card ramps serve poorly. And two parts are
+        A fiat ramp brings new users to NEAR Intents from any bank that emails a receipt, including the currencies card ramps serve poorly. Parts of it are also
         public goods any NEAR project can use:
       </p>
       <ul className="plain">
         <li><strong>Model registry.</strong> NEAR AI Cloud&rsquo;s allowlist lives on Base. This contract proves model keys on NEAR, through the same verifier the MPC network uses, so any contract can ask if a key is genuine.</li>
-        <li><strong>Email facts.</strong> The same pipeline can prove any fact from any signed email: income, employment, a flight delay. A bank transfer is the first use of it.</li>
+        <li><strong>Encrypted NEAR AI calls from an enclave.</strong> The Rust client for NEAR AI&rsquo;s E2EE protocol here runs on OutLayer and matches NEAR&rsquo;s published test vectors. Any OutLayer project can reuse it.</li>
+        <li><strong>A path to email facts.</strong> Nothing in the pipeline is specific to banks. New rules could prove other facts from a signed email, such as a flight delay or a paid invoice, for any contract. That part isn&rsquo;t built yet.</li>
       </ul>
 
       <h2>What it doesn&rsquo;t do</h2>

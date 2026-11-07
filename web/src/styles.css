@@ -245,6 +245,9 @@ nav a[aria-current='page'] { color: var(--ink); border-bottom-color: var(--brass
 }
 
 .verdict { margin-top: 12px; }
+.routes { margin: 18px 0; padding-top: 14px; border-top: 1px dashed var(--rule-strong); }
+.proofbox { margin: 14px 0; }
+.proofbox .steps { margin-top: 0; }
 
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 16px 0; }
 @media (max-width: 640px) { .columns { grid-template-columns: 1fr; } }

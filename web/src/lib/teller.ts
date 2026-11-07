@@ -7,6 +7,8 @@ import { emailAad, revealAad, type Terms } from './canonical';
 import { send, TGAS, view, type Outcome, type Signer } from './near';
 import { open, publicOf, seal } from './seal';
 
+const INSPECT_AAD = 'blind-teller/v1|inspect';
+
 export type OrderStatus = 'Open' | 'Settling' | 'Settled' | 'PayoutFailed' | 'Cancelled' | 'Expired';
 
 export interface Offer {
@@ -203,9 +205,18 @@ export async function modelRefs(): Promise<{ id: string; key: string }[]> {
   });
 }
 
+/** Check any real email's DKIM against live DNS, inside the enclave. */
+/** Mail may not be UTF-8, and one changed byte breaks DKIM, so files stay as bytes. */
+const mailBytes = (email: string | Uint8Array) => (typeof email === 'string' ? utf8(email) : email);
+
+export async function inspectEmail(sealKey: string, email: string | Uint8Array): Promise<{ ok: boolean; code?: string; signed_headers?: string[]; signed_at?: number | null }> {
+  const sealed = seal(fromHex(sealKey), mailBytes(email), INSPECT_AAD);
+  return (await callEnclave({ action: 'inspect', sealed_email: sealed })).output;
+}
+
 /** Seal the email in this browser and hand it to the enclave. */
-export async function prove(sealKey: string, terms: Terms, sealedPayee: string, email: string, dev: boolean): Promise<ProofResult> {
-  const sealedEmail = seal(fromHex(sealKey), utf8(email), emailAad(terms.contract, terms.order_id));
+export async function prove(sealKey: string, terms: Terms, sealedPayee: string, email: string | Uint8Array, dev: boolean): Promise<ProofResult> {
+  const sealedEmail = seal(fromHex(sealKey), mailBytes(email), emailAad(terms.contract, terms.order_id));
   const models = dev ? [] : await modelRefs();
   const call = await callEnclave({ action: 'prove', terms, sealed_email: sealedEmail, sealed_payee: sealedPayee, models, dev });
   return { ...call.output, attestationUrl: call.attestationUrl, callId: call.callId, ms: call.ms };
@@ -233,7 +244,7 @@ export const REFUSALS: Record<string, string> = {
   dkim_duplicate_header: 'A header appears twice, which is how a forged sender gets shown to readers.',
   dkim_body_hash: "The body changed after the bank signed it. The bank's signature no longer matches.",
   dkim_key_missing: "The bank's public key couldn't be found.",
-  dkim_key_revoked: 'The bank has revoked this signing key.',
+  dkim_key_revoked: 'The sender no longer publishes this signing key. Providers rotate keys, so this is normal for older mail. Try a recent email.',
   dkim_key_weak: "The bank's signing key is too short to trust.",
   dkim_signature: "The signature wasn't made by this bank's key.",
   dkim_alignment: "The email isn't signed by a bank this payment rail accepts.",

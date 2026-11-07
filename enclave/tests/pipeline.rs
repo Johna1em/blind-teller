@@ -439,6 +439,63 @@ fn reveal_refuses_a_closed_order() {
     assert_eq!(code(&out), "order_not_open");
 }
 
+// ---- inspect ----
+
+fn doh(txt: &str) -> HttpResponse {
+    HttpResponse { status: 200, body: serde_json::to_vec(&json!({ "Answer": [{ "type": 16, "data": txt }] })).unwrap() }
+}
+
+fn sandbox_record() -> String {
+    format!("v=DKIM1; k=rsa; p={}", policy::SANDBOX_KEY_DER_B64.trim())
+}
+
+fn inspect_with(host: &Mock, raw: &[u8]) -> Value {
+    let secret = seal_secret(host).unwrap();
+    let sealed = seal::seal(&seal::public_of(&secret), raw, pipeline::INSPECT_AAD.as_bytes(), &[2u8; 44]).unwrap();
+    pipeline::run(host, json!({ "action": "inspect", "sealed_email": sealed }).to_string().as_bytes())
+}
+
+/// Google sends joined text and Cloudflare sends quoted chunks. A bug here would
+/// fail every real email and no sandbox email, so it's tested with both.
+#[test]
+fn a_real_key_lookup_works_across_both_resolver_formats() {
+    let host = Mock::new();
+    let record = sandbox_record();
+    let (head, tail) = record.split_at(40);
+    host.responses.borrow_mut().extend([doh(&record), doh(&format!("\"{head}\" \"{tail}\""))]);
+    let out = inspect_with(&host, &sign_bank(&email("8,850.37", "x")));
+    assert_eq!(out["ok"], true, "{out}");
+    let urls: Vec<String> = host.requests.borrow().iter().map(|r| r.url.clone()).collect();
+    assert!(urls[0].starts_with("https://dns.google/resolve?name=sb1._domainkey.alerts.meridianbank.example"));
+    assert!(urls[1].starts_with("https://cloudflare-dns.com/dns-query"));
+}
+
+#[test]
+fn two_resolvers_must_agree_on_a_key() {
+    let host = Mock::new();
+    host.responses.borrow_mut().extend([doh(&sandbox_record()), doh("v=DKIM1; k=rsa; p=AAAA")]);
+    assert_eq!(code(&inspect_with(&host, &sign_bank(&email("8,850.37", "x")))), "dkim_key_missing");
+}
+
+#[test]
+fn inspect_names_no_sender_or_content() {
+    let host = Mock::new();
+    let record = sandbox_record();
+    host.responses.borrow_mut().extend([doh(&record), doh(&record)]);
+    let text = inspect_with(&host, &sign_bank(&email("8,850.37", "x"))).to_string();
+    for private in ["meridian", "Meridian", "asha", "8,850", "Debit alert"] {
+        assert!(!text.contains(private), "leaked {private}: {text}");
+    }
+}
+
+#[test]
+fn an_order_ciphertext_cannot_be_opened_through_inspect() {
+    let host = Mock::new();
+    let i = input(&host, &sign_bank(&email("8,850.37", "x")), true, 3);
+    let out = pipeline::run(&host, json!({ "action": "inspect", "sealed_email": i.sealed_email }).to_string().as_bytes());
+    assert_eq!(code(&out), "bad_ciphertext");
+}
+
 // ---- keys ----
 
 #[test]

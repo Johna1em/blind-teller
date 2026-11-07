@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DEMO, TELLER } from '../config';
+import { DEMO } from '../config';
 import {
-  demoBuyer, getOffer, getOrder, listOffers, newBuyerKey, prove, refusal, revealPayee, settle, takeOffer, termsOf,
+  demoBuyer, getOrder, listOffers, newBuyerKey, prove, refusal, revealPayee, settle, takeOffer, termsOf,
   type Config, type Offer, type Order, type Payee, type ProofResult, type TraceStep,
 } from '../lib/teller';
+import { quoteRoute, ROUTES, type Quote } from '../lib/intents';
+import { checkOrder, checkRun, type Check } from '../lib/runproof';
 import { bankForRail, issueEmail } from '../sandbox/banks';
 import { Notice, short, Stamp, Step, Ticket, tokenText, TxLink, type StepState } from './parts';
 
@@ -20,6 +22,63 @@ const STEPS: { id: string; label: string; dev?: string }[] = [
   { id: 'rules', label: 'Fixed rules pass' },
   { id: 'sign', label: 'Verdict signed' },
 ];
+
+/** The mainnet route from here: any chain, through NEAR Intents. */
+function SendAnywhere({ amount }: { amount: string }) {
+  const [quotes, setQuotes] = useState<Record<string, Quote | 'failed'>>({});
+
+  useEffect(() => {
+    for (const route of ROUTES) {
+      quoteRoute(route, amount)
+        .then((q) => setQuotes((all) => ({ ...all, [route.id]: q })))
+        .catch(() => setQuotes((all) => ({ ...all, [route.id]: 'failed' })));
+    }
+  }, [amount]);
+
+  return (
+    <div className="routes">
+      <h3>Send it to any chain</h3>
+      <p className="fine">Live NEAR Intents quotes for this amount, from the mainnet 1Click API. Testnet tokens can&rsquo;t bridge, so nothing moves here.</p>
+      <dl className="pairs">
+        {ROUTES.map((route) => {
+          const q = quotes[route.id];
+          return (
+            <div key={route.id}>
+              <dt>{route.name}</dt>
+              <dd className="mono">{!q ? 'Quoting…' : q === 'failed' ? 'No quote right now' : `${Number(q.amountOut).toFixed(3)} USDC in about ${q.seconds}s`}</dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
+/** Lets a viewer check the order and the enclave run from public data. */
+function RunChecks({ orderId, order, config, attestationUrl }: { orderId: string; order: Order; config: Config | null; attestationUrl?: string }) {
+  const [checks, setChecks] = useState<Check[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function run() {
+    if (!config) return;
+    setBusy(true);
+    const results = await checkOrder(orderId, order, config);
+    if (attestationUrl) results.push(...(await checkRun(attestationUrl)));
+    setChecks(results);
+    setBusy(false);
+  }
+
+  return (
+    <div className="proofbox">
+      {checks ? (
+        <ol className="steps">{checks.map((c) => <Step key={c.id} state={c.ok ? 'pass' : 'fail'} label={c.label} detail={c.detail} />)}</ol>
+      ) : (
+        <button disabled={busy} onClick={run}>{busy ? 'Checking public data…' : 'Check this yourself'}</button>
+      )}
+      {attestationUrl ? <p className="fine"><a href={attestationUrl} target="_blank" rel="noreferrer">Raw hardware attestation for this run</a></p> : null}
+    </div>
+  );
+}
 
 interface Live {
   offerId: string;
@@ -39,6 +98,7 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
   const [error, setError] = useState('');
   const [trace, setTrace] = useState<TraceStep[]>([]);
   const [running, setRunning] = useState(false);
+  const [settling, setSettling] = useState(false);
   const [result, setResult] = useState<ProofResult | null>(null);
   const [settleHash, setSettleHash] = useState('');
   const [settled, setSettled] = useState<Order | null>(null);
@@ -88,7 +148,7 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
     setStage('receipt');
   }
 
-  async function hand(mail: string) {
+  async function hand(mail: string | Uint8Array) {
     if (!live || !config) return;
     setStage('reading');
     setRunning(true);
@@ -105,6 +165,7 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
         setStage('refused');
         return;
       }
+      setSettling(true);
       const tx = await settle(demoBuyer(), live.orderId, out.verdict);
       setSettleHash(tx.hash);
       setSettled(await getOrder(live.orderId));
@@ -115,6 +176,7 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
       setStage('refused');
     } finally {
       setRunning(false);
+      setSettling(false);
     }
   }
 
@@ -137,7 +199,7 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
   }
 
   async function readFile(file: File) {
-    await hand(await file.text());
+    await hand(new Uint8Array(await file.arrayBuffer()));
   }
 
   const bank = live ? bankForRail(live.order.rail) : null;
@@ -251,7 +313,7 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
               <ol className="steps">
                 <Step state="pass" label="Encrypted in this browser" />
                 {STEPS.map((s, i) => <Step key={s.id} state={stateOf(s.id, i)} label={dev && s.dev ? s.dev : s.label} />)}
-                {stage === 'paid' ? <Step state="pass" label="The contract checked the signature and paid" /> : null}
+                {settling || stage === 'paid' ? <Step state={settling ? 'run' : 'pass'} label="The contract checks the signature and pays" /> : null}
               </ol>
             ) : null}
 
@@ -285,7 +347,8 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
                     </ul>
                   </div>
                 </div>
-                {result?.attestationUrl ? <p className="fine"><a href={result.attestationUrl} target="_blank" rel="noreferrer">Hardware attestation for this run</a></p> : null}
+                <SendAnywhere amount={settled.token_amount} />
+                <RunChecks orderId={live.orderId} order={settled} config={config} attestationUrl={result?.attestationUrl} />
                 <button onClick={reset}>Back to the window</button>
               </div>
             ) : null}
@@ -296,4 +359,3 @@ export function Window({ config, offline }: { config: Config | null; offline: bo
   );
 }
 
-export { TELLER, getOffer };

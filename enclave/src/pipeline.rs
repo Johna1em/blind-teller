@@ -86,6 +86,14 @@ pub struct RevealInput {
     pub order_id: u64,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct InspectInput {
+    pub sealed_email: String,
+}
+
+/// Associated data for `inspect`, so an order's sealed email can't be replayed here.
+pub const INSPECT_AAD: &str = "blind-teller/v1|inspect";
+
 /// Steps the browser shows, ticking as they pass. Names only, never values.
 #[derive(Default)]
 struct Trace(Vec<Value>);
@@ -220,14 +228,17 @@ fn txt_lookup(host: &dyn Host, resolver: &str, name: &str) -> Result<Vec<String>
         .map_err(|_| DkimError::KeyMissing)?;
     let parsed: Value = serde_json::from_slice(&response.body).map_err(|_| DkimError::KeyMissing)?;
     let answers = parsed["Answer"].as_array().ok_or(DkimError::KeyMissing)?;
-    Ok(answers
-        .iter()
-        .filter(|a| a["type"] == 16)
-        .filter_map(|a| a["data"].as_str())
-        // Long records come back as quoted chunks: `"v=DKIM1; p=abc" "def"`.
-        .map(|d| d.split('"').enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect::<String>())
-        .map(|joined| joined.to_string())
-        .collect())
+    Ok(answers.iter().filter(|a| a["type"] == 16).filter_map(|a| a["data"].as_str()).map(unquote_txt).collect())
+}
+
+/// Resolvers disagree on TXT format. Cloudflare sends quoted chunks, `"v=DKIM1;
+/// p=abc" "def"`; Google sends the joined text. Both mean the same record.
+pub fn unquote_txt(data: &str) -> String {
+    if data.contains('"') {
+        data.split('"').enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect()
+    } else {
+        data.to_string()
+    }
 }
 
 /// Fetch a key from two independent resolvers. They must agree, so one poisoned
@@ -426,6 +437,48 @@ pub fn prove(host: &dyn Host, input: ProveInput) -> Value {
     })
 }
 
+/// Check any real email against live DNS, and answer pass or fail. This is how a
+/// viewer can see that DKIM here isn't a sandbox trick. It settles nothing, signs
+/// nothing and has no issuer list. The answer names no domain, sender or subject:
+/// the browser already knows those, and the run's output shouldn't.
+pub fn inspect(host: &dyn Host, input: InspectInput) -> Value {
+    if input.sealed_email.len() > MAX_SEALED_BYTES {
+        return json!({ "ok": false, "code": "email_too_large" });
+    }
+    let Ok(secret) = seal_secret(host) else {
+        return json!({ "ok": false, "code": "key_unavailable" });
+    };
+    let email = match seal::open(&secret, &input.sealed_email, INSPECT_AAD.as_bytes()) {
+        Ok(e) if e.len() <= MAX_EMAIL_BYTES => e,
+        Ok(_) => return json!({ "ok": false, "code": "email_too_large" }),
+        Err(code) => return json!({ "ok": false, "code": code }),
+    };
+    match dkim::verify(&email, 2048, |domain, selector| dns_key(host, domain, selector)) {
+        Ok(v) => {
+            let names: Vec<&str> = v.headers.iter().map(|(n, _)| n.as_str()).collect();
+            json!({ "ok": true, "signed_headers": names, "signed_at": v.signed_at })
+        }
+        Err(e) => json!({ "ok": false, "code": e.code() }),
+    }
+}
+
+/// Reach each host the manifest allows, and report status codes only. It proves
+/// the path to NEAR AI works from inside the enclave before a key is ever used.
+pub fn probe(host: &dyn Host) -> Value {
+    let get = |url: &str, headers: Vec<(String, String)>| {
+        host.http(HttpRequest { method: "GET", url: url.to_string(), headers, body: vec![], timeout_secs: 20 })
+            .map_or(json!("unreachable"), |r| json!(r.status))
+    };
+    let dns = || vec![("accept".to_string(), "application/dns-json".to_string())];
+    json!({
+        "ok": true,
+        "near_ai": get(&format!("{}/models", policy::NEAR_AI_BASE), vec![]),
+        "dns_google": get("https://dns.google/resolve?name=near.org&type=TXT", dns()),
+        "dns_cloudflare": get("https://cloudflare-dns.com/dns-query?name=near.org&type=TXT", dns()),
+        "model_key_set": host.secret("NEAR_AI_API_KEY").is_some_and(|k| !k.trim().is_empty()),
+    })
+}
+
 /// Dispatch one call. The input is JSON with an `action` field.
 pub fn run(host: &dyn Host, input: &[u8]) -> Value {
     let parsed: Value = match serde_json::from_slice(input) {
@@ -434,6 +487,11 @@ pub fn run(host: &dyn Host, input: &[u8]) -> Value {
     };
     match parsed["action"].as_str() {
         Some("pubkey") => pubkey(host).unwrap_or_else(|_| json!({ "ok": false, "code": "key_unavailable" })),
+        Some("probe") => probe(host),
+        Some("inspect") => match serde_json::from_value(parsed) {
+            Ok(i) => inspect(host, i),
+            Err(_) => json!({ "ok": false, "code": "bad_input" }),
+        },
         Some("reveal") => match serde_json::from_value(parsed) {
             Ok(i) => reveal(host, i),
             Err(_) => json!({ "ok": false, "code": "bad_input" }),
@@ -449,6 +507,13 @@ pub fn run(host: &dyn Host, input: &[u8]) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn txt_records_parse_from_either_resolver() {
+        assert_eq!(unquote_txt("v=DKIM1; k=rsa; p=abc"), "v=DKIM1; k=rsa; p=abc");
+        assert_eq!(unquote_txt("\"v=DKIM1; k=rsa; p=abc\" \"def\""), "v=DKIM1; k=rsa; p=abcdef");
+        assert_eq!(unquote_txt("\"v=DKIM1; p=abc\""), unquote_txt("v=DKIM1; p=abc"));
+    }
 
     #[test]
     fn dates_parse_with_their_offsets() {

@@ -3,7 +3,7 @@
 
 export const NETWORK = 'testnet';
 
-export const RPC_URLS = ['https://rpc.testnet.near.org', 'https://test.rpc.fastnear.com', 'https://rpc.testnet.fastnear.com'];
+export const RPC_URLS = ['https://test.rpc.fastnear.com', 'https://rpc.testnet.fastnear.com', 'https://rpc.testnet.near.org'];
 export const EXPLORER = 'https://testnet.nearblocks.io';
 
 export const TELLER = 'teller.blindteller.testnet';

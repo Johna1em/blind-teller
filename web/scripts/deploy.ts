@@ -70,7 +70,7 @@ async function publishEnclave() {
   const url = await uploadWasm(wasm, `${hash}.wasm`);
   log('uploaded enclave', hash, url);
   for (let i = 0; i < 40; i++) {
-    const r = await fetch(url, { method: 'HEAD' }).catch(() => null);
+    const r = await fetch(url).catch(() => null);
     if (r?.ok) break;
     await new Promise((res) => setTimeout(res, 5000));
   }

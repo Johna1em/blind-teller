@@ -1,14 +1,32 @@
 import { useState } from 'react';
 import { MODELS, REGISTRY, TELLER } from '../config';
 import { checkModel, type Check } from '../lib/attest';
-import { enclaveKeys, type Config, type EnclaveKeys } from '../lib/teller';
-import { Notice, short, Step } from './parts';
+import { enclaveKeys, inspectEmail, refusal, type Config, type EnclaveKeys } from '../lib/teller';
+import { Notice, short, Stamp, Step } from './parts';
 
 export function Proof({ config }: { config: Config | null }) {
   const [running, setRunning] = useState(false);
   const [models, setModels] = useState<Record<string, Check[]>>({});
   const [keys, setKeys] = useState<EnclaveKeys | null>(null);
   const [keyError, setKeyError] = useState('');
+  const [inspecting, setInspecting] = useState(false);
+  const [inspected, setInspected] = useState<{ ok: boolean; code?: string; headers?: string[]; domain?: string } | null>(null);
+
+  async function inspect(file: File) {
+    if (!config) return;
+    setInspecting(true);
+    setInspected(null);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      // Read here in the browser for display. It never leaves in plaintext.
+      const domain = new TextDecoder('latin1').decode(bytes).match(/DKIM-Signature:[^]*?\bd=([a-z0-9.-]+)/i)?.[1];
+      const out = await inspectEmail(config.seal_key, bytes);
+      setInspected({ ok: out.ok, code: out.code, headers: out.signed_headers, domain });
+    } catch (e) {
+      setInspected({ ok: false, code: (e as Error).message });
+    }
+    setInspecting(false);
+  }
 
   async function run() {
     setRunning(true);
@@ -58,6 +76,36 @@ export function Proof({ config }: { config: Config | null }) {
           )}
         </section>
       ))}
+
+      <section className="panel">
+        <h2>Try a real email from your inbox</h2>
+        <p>
+          The banks on this site are fictional, so here&rsquo;s the proof that the DKIM check is real. Save any email as a <span className="mono">.eml</span> file
+          (in Gmail: the three dots, then &ldquo;Download message&rdquo;). This page encrypts it, and the enclave checks it against the sender&rsquo;s live DNS records.
+        </p>
+        <p className="fine">The enclave answers only pass or fail, stores nothing, and never moves money. Recent mail you received often passes. Older mail can fail once the sender rotates its key, and an edited or forwarded email won&rsquo;t pass.</p>
+        <label className="filebtn">
+          {inspecting ? 'Checking inside the enclave…' : 'Choose a .eml file'}
+          <input type="file" accept=".eml,message/rfc822" disabled={inspecting || !config} onChange={(e) => e.target.files?.[0] && inspect(e.target.files[0])} />
+        </label>
+        {inspected ? (
+          inspected.ok ? (
+            <>
+              <Stamp kind="paid">Genuine</Stamp>
+              <p>
+                The enclave verified this email&rsquo;s signature against {inspected.domain ?? 'the sender'}&rsquo;s public key in DNS, using two independent resolvers.
+                {' '}It covers these headers: <span className="mono">{inspected.headers?.join(', ')}</span>.
+              </p>
+            </>
+          ) : (
+            <>
+              <Stamp kind="refused">Refused</Stamp>
+              <p className="reason">{refusal(inspected.code)}</p>
+              <p className="fine mono">{inspected.code}</p>
+            </>
+          )
+        ) : null}
+      </section>
 
       <section className="panel">
         <h2>The enclave and the contract</h2>

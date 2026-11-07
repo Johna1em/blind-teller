@@ -5,8 +5,8 @@
   "token": "usdc.fakes.testnet",
   "enclave": {
     "project": "blindteller.testnet/teller",
-    "wasm_sha256": "a90bb9b9ea8f3a36581133e6a7dc0f876bedf512cdb1fbdb3bcc46aad7e35943",
-    "url": "https://test.fastfs.io/blindteller.testnet/outlayer.testnet/a90bb9b9ea8f3a36581133e6a7dc0f876bedf512cdb1fbdb3bcc46aad7e35943.wasm"
+    "wasm_sha256": "c6f3724e65a3ecf45d950c30de115e1ecb08e3039f84bc4ff0cf7464411a6c85",
+    "url": "https://test.fastfs.io/blindteller.testnet/outlayer.testnet/c6f3724e65a3ecf45d950c30de115e1ecb08e3039f84bc4ff0cf7464411a6c85.wasm"
   },
   "keys": {
     "extractor": "dev-allowed",

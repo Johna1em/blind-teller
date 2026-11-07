@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEMO, TELLER } from '../src/config';
 import { ATTACKS, randomOrderId } from '../src/lib/attack';
+import { checkOrder, checkRun } from '../src/lib/runproof';
 import { getConfig, getOrder, listOffers, newBuyerKey, prove, revealPayee, settle, takeOffer, termsOf, type Offer } from '../src/lib/teller';
 import { BANKS, bankForRail, issueEmail } from '../src/sandbox/banks';
 import { BUYER_ACCOUNT, log, REPO } from './lib';
@@ -47,6 +48,11 @@ async function happyPath(offerId: string, offer: Offer) {
   const settled = (await getOrder(orderId))!;
   log('settled', tx.hash, settled.status, settled.extractor, result.attestationUrl ?? '');
   if (settled.status !== 'Settled') throw new Error(`order is ${settled.status}`);
+
+  const proofs = [...(await checkOrder(orderId, settled, await getConfig())), ...(result.attestationUrl ? await checkRun(result.attestationUrl) : [])];
+  const failing = proofs.filter((c) => !c.ok && !(useDev && c.id === 'models'));
+  log(`public checks: ${proofs.length - failing.length} of ${proofs.length} passed`, failing.map((c) => `${c.label}: ${c.detail}`).join('; '));
+  if (failing.length) throw new Error('a public check failed');
 
   let replayed = false;
   try {
