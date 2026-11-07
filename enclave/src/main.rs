@@ -67,6 +67,10 @@ mod host {
         fn secret(&self, name: &str) -> Option<String> {
             std::env::var(name).ok()
         }
+
+        fn sleep_ms(&self, ms: u64) {
+            std::thread::sleep(Duration::from_millis(ms));
+        }
     }
 }
 

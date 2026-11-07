@@ -5,8 +5,8 @@
   "token": "usdc.fakes.testnet",
   "enclave": {
     "project": "blindteller.testnet/teller",
-    "wasm_sha256": "c6f3724e65a3ecf45d950c30de115e1ecb08e3039f84bc4ff0cf7464411a6c85",
-    "url": "https://test.fastfs.io/blindteller.testnet/outlayer.testnet/c6f3724e65a3ecf45d950c30de115e1ecb08e3039f84bc4ff0cf7464411a6c85.wasm"
+    "wasm_sha256": "55cd593849b60a3dedb989807ed936bb941a01a92fee1b1e30e3b0c7bd862cd8",
+    "url": "https://test.fastfs.io/blindteller.testnet/outlayer.testnet/55cd593849b60a3dedb989807ed936bb941a01a92fee1b1e30e3b0c7bd862cd8.wasm"
   },
   "keys": {
     "extractor": "dev-allowed",
@@ -14,9 +14,9 @@
       "z-ai/glm-5.3-flash",
       "Qwen/Qwen3.8-27B"
     ],
-    "policy_hash": "c651f24aaf6398a2729072d0837bf8e698dfb5f433cc79d8a4914ca9662fdd9d",
+    "policy_hash": "343be8fbce6ca86484af9b01b881b97576c49d59d83601e4ea1b68c4f9619aad",
     "seal_public": "7ae2e0681165291e363181346715f0eb6d572ef73aeea235f700585bdff19157",
-    "signature": "b3fe35fb44fa9ce94d21ec712a5832fb5f5da2dca9d79adf6a9a53d0490d4cc958628d5ba6e58a0a6568956f69fbc2244b97f9bdcd927d37e55cf6e86e434505",
+    "signature": "6d4dc26c2016bc6aa6aa9cdd81e74057964585b42be7c35c4e2458a45bdca1f103af58f758374bdaf5e3edf20635f5a2d409afa9b271d0a8eaa0bf830dc8a800",
     "verdict_public": "36c386858dba34c5ad3ef60632758179c72dc9f84a937a5eb6e4f23dae7ec564",
     "version": "0.1.0"
   },

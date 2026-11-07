@@ -1,5 +1,10 @@
-//! What the pipeline needs from the outside world. OutLayer provides the real
-//! one in `main.rs`; tests provide a scripted one.
+//! Everything the enclave can do to the outside world. OutLayer provides the
+//! real one in `main.rs`; tests provide a scripted one.
+//!
+//! **Nothing is kept after a response returns.** This trait has no storage call
+//! on purpose: no file, no database, no cache. An email exists only in the memory
+//! of one run, and that memory ends with the run. To save anything, this code
+//! would first have to add a method here, and that would change the wasm hash.
 
 #[derive(Debug, Clone)]
 pub struct HttpRequest {
@@ -28,4 +33,6 @@ pub trait Host {
     fn http(&self, request: HttpRequest) -> Result<HttpResponse, String>;
     /// A secret from the environment.
     fn secret(&self, name: &str) -> Option<String>;
+    /// Wait, for bounded retries.
+    fn sleep_ms(&self, ms: u64);
 }

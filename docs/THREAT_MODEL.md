@@ -66,6 +66,8 @@ The seller's sealed payee record is stored on-chain as ciphertext. It holds a pa
 
 **A debit alert isn't proof of arrival.** It shows the bank says money left. Transfers can reverse. Use instant, irreversible rails and cap order sizes.
 
+**One Qwen replica couldn't be checked for image provenance.** NEAR's SDK verified the images for both models, but a run sometimes reaches a Qwen replica whose deployment file it can't parse, so `scripts/smoke.ts` retries. This is why provenance is reported and not required.
+
 **Bank coverage.** The issuers on the real rails in `enclave/src/policy.rs` are candidates, unverified until tested with a real sample. Some banks send no email, some users get SMS only, and a signing domain can belong to a mail vendor such as SendGrid.
 
 **Short signing keys.** The enclave refuses RSA keys under 2048 bits. In our test of 14 fresh emails, 5 senders still used shorter keys. A bank that signs with one can't join a rail until it upgrades, because a 1024-bit key is within reach of a funded attacker.

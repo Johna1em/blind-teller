@@ -4,6 +4,8 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { createInterface } from 'node:readline';
+import { Writable } from 'node:stream';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { x25519 } from '@noble/curves/ed25519.js';
@@ -76,3 +78,25 @@ export async function keystoreKey(accessor: object, owner: string, profile: stri
 }
 
 export const log = (...parts: unknown[]) => console.log('•', ...parts);
+
+async function promptHidden(question: string): Promise<string> {
+  process.stdout.write(question);
+  const silent = new Writable({ write: (_chunk, _encoding, done) => done() });
+  const rl = createInterface({ input: process.stdin, output: silent, terminal: true });
+  const answer = await new Promise<string>((resolve) => rl.question('', resolve));
+  rl.close();
+  process.stdout.write('\n');
+  return answer;
+}
+
+/** The NEAR AI key, from the environment, `web/.env` or a hidden prompt. Never logged. */
+export async function readNearAiKey(): Promise<string> {
+  try {
+    process.loadEnvFile(join(REPO, 'web/.env'));
+  } catch {
+    // No .env file. That's fine: the prompt is the default.
+  }
+  const key = process.env.NEAR_AI_API_KEY;
+  if (key) return key.trim();
+  return process.stdin.isTTY ? (await promptHidden('Paste your NEAR AI key, then press Enter (nothing will show): ')).trim() : '';
+}

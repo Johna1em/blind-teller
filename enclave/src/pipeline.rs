@@ -1,8 +1,14 @@
 //! The actions the enclave answers.
 //!
-//! `pubkey`  publishes the sealing and verdict keys, and the policy hash.
-//! `reveal`  re-seals a seller's payee details to the buyer of a live order.
-//! `prove`   reads one sealed email and, if every rule passes, signs a verdict.
+//! `pubkey`   publishes the sealing and verdict keys, and the policy hash.
+//! `reveal`   re-seals a seller's payee details to the buyer of a live order.
+//! `prove`    reads one sealed email and, if every rule passes, signs a verdict.
+//! `inspect`  checks any email's DKIM signature and answers pass or fail.
+//! `probe`    reports which allowed hosts this run can reach.
+//!
+//! **Nothing is kept after a response returns.** `Host` has no storage call, so
+//! this code can't save an email, a verdict or anything else. Each run starts
+//! empty, and its memory ends with it.
 //!
 //! Nothing here writes a log, and errors are codes, never content: stdout is the
 //! only channel out, and it carries no email text, name or amount.
@@ -470,8 +476,12 @@ pub fn probe(host: &dyn Host) -> Value {
             .map_or(json!("unreachable"), |r| json!(r.status))
     };
     let dns = || vec![("accept".to_string(), "application/dns-json".to_string())];
+    let started = host.now_ms();
+    host.sleep_ms(20);
+    let slept = host.now_ms().saturating_sub(started);
     json!({
         "ok": true,
+        "slept_ms": slept,
         "near_ai": get(&format!("{}/models", policy::NEAR_AI_BASE), vec![]),
         "dns_google": get("https://dns.google/resolve?name=near.org&type=TXT", dns()),
         "dns_cloudflare": get("https://cloudflare-dns.com/dns-query?name=near.org&type=TXT", dns()),

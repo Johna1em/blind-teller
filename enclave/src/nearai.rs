@@ -17,13 +17,15 @@ use sha2::{Digest, Sha256};
 use crate::checks::Extraction;
 use crate::e2ee::{self, ReplyKey};
 use crate::host::{Host, HttpRequest};
-use crate::policy::{NEAR_AI_BASE, SYSTEM_PROMPT};
+use crate::policy::{model_options, MAX_TOKENS, NEAR_AI_BASE, SYSTEM_PROMPT};
 
 /// Time for one model call. Two calls and overhead must fit a 180 s run.
 const CHAT_TIMEOUT_SECS: u64 = 75;
-const SIGNATURE_TIMEOUT_SECS: u64 = 20;
-const SIGNATURE_ATTEMPTS: usize = 3;
-const MAX_TOKENS: u32 = 1_200;
+const SIGNATURE_TIMEOUT_SECS: u64 = 10;
+/// A signature lands a moment after the reply, and a lookup can reach a node that
+/// doesn't hold it yet. NEAR's verification example uses the same schedule.
+const SIGNATURE_ATTEMPTS: usize = 5;
+const SIGNATURE_WAIT_MS: u64 = 1_000;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ModelRef {
@@ -56,13 +58,18 @@ pub fn build_body(model: &ModelRef, reply: &ReplyKey, user: &str, entropy: &[[u8
     let aad = e2ee::field_aad(&reply.request_aad(), e2ee::FIELD_CONTENT);
     let system = e2ee::encrypt(&x25519, SYSTEM_PROMPT, &aad, &entropy[0])?;
     let user = e2ee::encrypt(&x25519, user, &aad, &entropy[1])?;
-    let body = json!({
+    let Value::Object(mut body) = json!({
         "model": model.id,
         "messages": [{ "role": "system", "content": system }, { "role": "user", "content": user }],
         "temperature": 0,
         "max_tokens": MAX_TOKENS,
         "stream": false,
-    });
+    }) else {
+        return Err("model_request_failed");
+    };
+    if let Value::Object(options) = model_options(&model.id) {
+        body.extend(options);
+    }
     serde_json::to_vec(&body).map_err(|_| "model_request_failed")
 }
 
@@ -95,7 +102,8 @@ pub fn verify_signature(model: &ModelRef, signature_json: &[u8], request: &[u8],
         return Err("model_signature_invalid");
     }
     // `gateway` means the gateway signed, which proves nothing about the model.
-    if s.signature_kind.as_deref().is_some_and(|k| k != "provider_tee") {
+    // A missing kind proves nothing either: NEAR's docs say not to infer it.
+    if s.signature_kind.as_deref() != Some("provider_tee") {
         return Err("model_signature_not_tee");
     }
     let expected = format!("{}:{}:{}", model.id, sha256_hex(request), sha256_hex(response));
@@ -144,6 +152,9 @@ pub fn read_email(host: &dyn Host, model: &ModelRef, api_key: &str, email_text: 
         return Err("model_error");
     }
     let parsed: Value = serde_json::from_slice(&response.body).map_err(|_| "model_reply_invalid")?;
+    if parsed["choices"][0]["finish_reason"] == "length" {
+        return Err("model_reply_truncated");
+    }
     let chat_id = parsed["id"].as_str().ok_or("model_reply_invalid")?;
     let ciphertext = parsed["choices"][0]["message"]["content"].as_str().ok_or("model_reply_invalid")?;
     let content = reply.decrypt(ciphertext).map_err(|_| "model_reply_undecryptable")?;
@@ -153,10 +164,18 @@ pub fn read_email(host: &dyn Host, model: &ModelRef, api_key: &str, email_text: 
     parse_reply(&content)
 }
 
-/// The signature lands a moment after the response, so allow a short wait.
+/// A successful answer can still mean "unavailable". It then carries `error_code`
+/// and no signature, and it's worth asking again.
+fn is_signature(body: &[u8]) -> bool {
+    serde_json::from_slice::<Value>(body).is_ok_and(|v| v.get("error_code").is_none() && v.get("signature").is_some())
+}
+
 fn fetch_signature(host: &dyn Host, chat_id: &str, api_key: &str) -> Result<Vec<u8>, &'static str> {
     let mut last = "model_signature_missing";
-    for _ in 0..SIGNATURE_ATTEMPTS {
+    for attempt in 0..SIGNATURE_ATTEMPTS {
+        if attempt > 0 {
+            host.sleep_ms(SIGNATURE_WAIT_MS);
+        }
         let response = host.http(HttpRequest {
             method: "GET",
             url: format!("{NEAR_AI_BASE}/signature/{chat_id}?signing_algo=ed25519"),
@@ -165,7 +184,7 @@ fn fetch_signature(host: &dyn Host, chat_id: &str, api_key: &str) -> Result<Vec<
             timeout_secs: SIGNATURE_TIMEOUT_SECS,
         });
         match response {
-            Ok(r) if r.status == 200 => return Ok(r.body),
+            Ok(r) if r.status == 200 && is_signature(&r.body) => return Ok(r.body),
             Ok(_) => last = "model_signature_missing",
             Err(_) => last = "model_unreachable",
         }
@@ -222,6 +241,41 @@ mod tests {
         let (k, m) = model();
         let s = sig_json(&k, &m, &good_text(&m, b"req", b"res"), "gateway");
         assert_eq!(verify_signature(&m, &s, b"req", b"res"), Err("model_signature_not_tee"));
+    }
+
+    #[test]
+    fn a_signature_of_unknown_kind_is_refused() {
+        let (k, m) = model();
+        let text = good_text(&m, b"req", b"res");
+        let unlabelled = serde_json::to_vec(&json!({
+            "text": text, "signature": hex::encode(k.sign(text.as_bytes()).to_bytes()),
+            "signing_address": m.key, "signing_algo": "ed25519",
+        }))
+        .unwrap();
+        assert_eq!(verify_signature(&m, &unlabelled, b"req", b"res"), Err("model_signature_not_tee"));
+    }
+
+    #[test]
+    fn thinking_is_capped_for_each_model() {
+        let reply = ReplyKey::from_seed(&[1u8; 32]);
+        let key = hex::encode(SigningKey::from_bytes(&[3u8; 32]).verifying_key().to_bytes());
+        let body = |id: &str| -> Value {
+            let m = ModelRef { id: id.into(), key: key.clone() };
+            serde_json::from_slice(&build_body(&m, &reply, "x", &[[2u8; 56], [3u8; 56]]).unwrap()).unwrap()
+        };
+        let glm = body("z-ai/glm-5.3-flash");
+        assert_eq!(glm["thinking_token_budget"], 512);
+        assert_eq!(glm["max_tokens"], MAX_TOKENS);
+        let qwen = body("Qwen/Qwen3.8-27B");
+        assert_eq!(qwen["chat_template_kwargs"]["enable_thinking"], false);
+        assert_eq!(qwen["max_tokens"], MAX_TOKENS);
+    }
+
+    #[test]
+    fn only_a_real_signature_ends_the_wait() {
+        assert!(is_signature(br#"{"text":"t","signature":"s"}"#));
+        assert!(!is_signature(br#"{"error_code":"not_found","message":"unavailable"}"#));
+        assert!(!is_signature(b"not json"));
     }
 
     #[test]

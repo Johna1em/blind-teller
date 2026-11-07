@@ -3,6 +3,7 @@
 //! Anyone can read what this code accepts. `policy_hash` commits to the rails,
 //! the prompt and the models, and is published beside the enclave's keys.
 
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 /// The contract whose orders `reveal` may open. A `reveal` for any other
@@ -19,6 +20,25 @@ pub const NEAR_AI_BASE: &str = "https://cloud-api.near.ai/v1";
 
 /// Two different models read every email. Both must agree exactly.
 pub const MODELS: [&str; 2] = ["z-ai/glm-5.3-flash", "Qwen/Qwen3.8-27B"];
+
+/// The longest reply allowed. Thinking counts against this, so it has to leave
+/// room for the answer after the model's thinking.
+pub const MAX_TOKENS: u32 = 4_096;
+
+/// GLM's limit on thinking, per email.
+const GLM_THINKING_TOKENS: u32 = 512;
+
+/// Request fields that keep each model's thinking short, because reading a
+/// receipt is copying, not reasoning. GLM thinks for up to 8,192 tokens by default
+/// and could hit `MAX_TOKENS` before it answers. The parameter differs by model:
+/// see https://docs.near.ai/cloud/reasoning-models.
+pub fn model_options(model: &str) -> Value {
+    match model {
+        "z-ai/glm-5.3-flash" => json!({ "thinking_token_budget": GLM_THINKING_TOKENS }),
+        "Qwen/Qwen3.8-27B" => json!({ "chat_template_kwargs": { "enable_thinking": false } }),
+        _ => json!({}),
+    }
+}
 
 /// RFC 2606 keeps `.example` for documentation, so no real bank can ever hold
 /// these domains. Their keys are public test keys: sandbox rails move test
@@ -103,7 +123,9 @@ pub fn policy_hash() -> String {
     for model in MODELS {
         h.update(b"\nmodel:");
         h.update(model.as_bytes());
+        h.update(model_options(model).to_string().as_bytes());
     }
+    h.update(format!("\nmax_tokens:{MAX_TOKENS}").as_bytes());
     for r in RAILS {
         h.update(format!("\nrail:{}:{}", r.id, r.currency).as_bytes());
         for i in r.issuers {
@@ -134,6 +156,13 @@ mod tests {
         let upi = rail("upi").unwrap();
         assert!(issuer(upi, "alerts.meridianbank.example").is_none());
         assert!(upi.issuers.iter().all(|i| i.key == KeySource::Dns));
+    }
+
+    #[test]
+    fn every_model_has_its_thinking_capped() {
+        for model in MODELS {
+            assert_ne!(model_options(model), json!({}), "{model}");
+        }
     }
 
     #[test]

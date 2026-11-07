@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { MODELS, REGISTRY, TELLER } from '../config';
-import { checkModel, type Check } from '../lib/attest';
+import { checkGateway, checkModel, type Check } from '../lib/attest';
 import { enclaveKeys, inspectEmail, refusal, type Config, type EnclaveKeys } from '../lib/teller';
 import { Notice, short, Stamp, Step } from './parts';
 
 export function Proof({ config }: { config: Config | null }) {
   const [running, setRunning] = useState(false);
+  const [gateway, setGateway] = useState<Check[] | null>(null);
   const [models, setModels] = useState<Record<string, Check[]>>({});
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [keys, setKeys] = useState<EnclaveKeys | null>(null);
   const [keyError, setKeyError] = useState('');
   const [inspecting, setInspecting] = useState(false);
@@ -30,17 +32,16 @@ export function Proof({ config }: { config: Config | null }) {
 
   async function run() {
     setRunning(true);
+    setCheckedAt(null);
+    setGateway(null);
     setModels({});
     setKeys(null);
     setKeyError('');
+    setGateway(await checkGateway());
     await Promise.all(
       MODELS.map(async (m) => {
-        try {
-          const checks = await checkModel(m);
-          setModels((all) => ({ ...all, [m]: checks }));
-        } catch (e) {
-          setModels((all) => ({ ...all, [m]: [{ id: 'fetch', label: 'Fetched a fresh attestation', ok: false, detail: String((e as Error).message) }] }));
-        }
+        const checks = await checkModel(m);
+        setModels((all) => ({ ...all, [m]: checks }));
       }),
     );
     try {
@@ -48,10 +49,18 @@ export function Proof({ config }: { config: Config | null }) {
     } catch (e) {
       setKeyError((e as Error).message);
     }
+    setCheckedAt(new Date());
     setRunning(false);
   }
 
   const matches = keys && config ? keys.verdict_public === config.verdict_key && keys.seal_public === config.seal_key : null;
+  const results: Check[] = [
+    ...(gateway ?? []),
+    ...MODELS.flatMap((m) => models[m] ?? []),
+    { id: 'keys', label: "The enclave's keys match the contract's", ok: !!matches, detail: '' },
+  ];
+  const failed = results.filter((c) => !c.ok);
+  const verified = checkedAt !== null && failed.length === 0;
 
   return (
     <>
@@ -62,6 +71,36 @@ export function Proof({ config }: { config: Config | null }) {
           and no server of ours is involved, because there isn&rsquo;t one.
         </p>
         <button className="primary" disabled={running} onClick={run}>{running ? 'Checking…' : 'Run the checks'}</button>
+      </section>
+
+      {checkedAt ? (
+        <section className="panel" aria-live="polite">
+          <h2>{verified ? 'Verified' : 'Not verified'}</h2>
+          <Stamp kind={verified ? 'paid' : 'refused'}>{verified ? 'Verified' : 'Not verified'}</Stamp>
+          {verified ? (
+            <p>
+              All {results.length} checks passed at {checkedAt.toUTCString()}, with nonces made in this browser. Each one is listed below. This proves the environment.
+              Each settled order carries its own proof: the model&rsquo;s signature over that exact exchange.
+            </p>
+          ) : (
+            <>
+              <p className="reason">{failed.length} of {results.length} checks failed, so treat this environment as unverified:</p>
+              <ul className="plain">{failed.map((c) => <li key={c.id}>{c.label}{c.detail ? `: ${c.detail}` : ''}</li>)}</ul>
+            </>
+          )}
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <h2>NEAR AI gateway</h2>
+        {gateway ? (
+          <ol className="steps">
+            {gateway.map((c) => <Step key={c.id} state={c.ok ? 'pass' : 'fail'} label={c.label} detail={c.detail} />)}
+          </ol>
+        ) : (
+          <p className="fine">{running ? 'Fetching evidence…' : 'Not checked yet.'}</p>
+        )}
+        <p className="fine">The gateway routes requests to the models. It only sees encrypted text, so privacy doesn&rsquo;t depend on it, but NEAR AI&rsquo;s docs start here.</p>
       </section>
 
       {MODELS.map((m) => (
@@ -131,8 +170,10 @@ export function Proof({ config }: { config: Config | null }) {
           <li>NEAR AI&rsquo;s measured config is a launcher. The model server changes at runtime, so the quote doesn&rsquo;t pin the model weights.</li>
           <li>OutLayer&rsquo;s keystore rests on a shared master secret that its key holder could reach.</li>
           <li>GPU evidence is checked here in the browser. It can&rsquo;t be checked on-chain, because NEAR has no P-384 host function.</li>
+          <li>This page doesn&rsquo;t check image provenance, meaning which build produced the images in the measured config. The repository&rsquo;s <span className="mono">smoke.ts</span> script reports it, using NEAR&rsquo;s SDK.</li>
+          <li>A browser can&rsquo;t see the TLS certificate, so this connection isn&rsquo;t bound to the gateway&rsquo;s quote. The email doesn&rsquo;t rely on that, because it&rsquo;s encrypted to the model&rsquo;s key.</li>
         </ul>
-        <p className="fine">The full list is in the threat model in the repository.</p>
+        <p className="fine">The verification policy is in the README, and the full list of limits is in the threat model.</p>
       </section>
     </>
   );

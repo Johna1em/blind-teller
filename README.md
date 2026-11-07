@@ -34,7 +34,7 @@ You need a browser. You don't need a wallet, funds or a login. Each order takes 
 | 6 | Read **Send it to any chain** | Live NEAR Intents quotes for this amount to Solana, Base, Arbitrum and Ethereum. These are dry quotes, because testnet tokens can't bridge |
 | 7 | Click **Check this yourself** | 12 checks run in your browser. One fails on purpose: *Read by the two private models*, because the demo uses the labelled rule-based reader. See [What's real](#whats-real) |
 | 8 | Open **Try to cheat** and run each attack | Each one runs on the real enclave and comes back **REFUSED** with a reason: edited amount, forged bank, lookalike domain, prompt injection, underpayment with a note, wrong payee, failed payment, reused receipt |
-| 9 | Open **Proof** and click **Run the checks** | 9 checks per model, with a fresh nonce: Intel quote, NVIDIA GPUs, boot log, and the key's proof on NEAR. Then the enclave's keys are compared with the contract's |
+| 9 | Open **Proof** and click **Run the checks** | A **VERIFIED** panel appears, with all 28 checks listed below it: NEAR AI's gateway first, then each model, with fresh nonces. They cover the Intel quote, NVIDIA GPUs, boot log and each key's proof on NEAR, then compare the enclave's keys with the contract's. Any failure shows **NOT VERIFIED** and names the check |
 | 10 | On **Proof**, choose a recent `.eml` from your own inbox | The enclave checks the real signature against the sender's live DNS and answers **GENUINE** or **REFUSED**. It stores nothing and moves no money |
 
 For step 10, Gmail users can open a message, click the three dots, then **Download message**. Older mail can fail if the sender has rotated its key. Senders with keys under 2048 bits are refused.
@@ -46,9 +46,9 @@ For step 10, Gmail users can open a message, click the three dots, then **Downlo
 | Escrow contract | **Live on testnet.** Orders settle with test USDC |
 | Model registry | **Live on testnet.** Both model keys are proven on NEAR through `tee-verifier` |
 | Enclave (OutLayer, Intel TDX) | **Live.** Decrypts, checks DKIM, runs the rules, signs verdicts |
-| Attestation checks | **Live.** They run in your browser with a fresh nonce |
+| Attestation checks | **Live.** They run in your browser with a fresh nonce, in the order NEAR AI's verification docs set out. See [Verification policy](#verification-policy) |
 | DKIM on real mail | **Live.** See [Real mail test](#real-mail-test) |
-| Two private models on NEAR AI Cloud | **Built, not yet run live.** It needs an API key. The E2EE code matches NEAR's published test vectors, and the full path passes against a scripted model server |
+| Two private models on NEAR AI Cloud | **Built, not yet run live.** It needs an API key. The E2EE code matches NEAR's published test vectors and uses the same headers and field labels as NEAR's official SDK, and the full path passes against a scripted model server |
 | Reader on the hosted demo | **A rule-based stand-in,** labelled in the UI and stamped `dev-rules` in each verdict, so it can't pass as an AI read |
 | Banks | **Fictional.** Their signing key is public on purpose, and their domains use `.example` |
 | Any-chain payout | **Quotes only.** They come from the mainnet 1Click API, and nothing moves |
@@ -78,6 +78,34 @@ If no proof arrives, the order expires and the USDC returns to the offer.
 | NEAR AI model TEE | The email, while it runs, through E2EE |
 | Us | Nothing. The site is static and there is no backend |
 
+## What's kept
+
+**Nothing is kept after a response returns.**
+
+- **Our servers:** there aren't any. The site is static files on FastFS, with no backend, database or logs of ours.
+- **The enclave:** [`Host`](enclave/src/host.rs) lists everything the enclave can do, and it has no storage call. Each run starts empty, and its memory ends with it. Errors are codes, never content.
+- **The browser:** an order lives in the page's memory. The site sets no cookies and uses no local storage.
+- **The chain:** it keeps the order, the signed verdict and a nullifier. None of them contain the email, the bank or a name.
+
+Two things are outside our control. OutLayer records each run, and the email in that run is sealed to the enclave. NEAR AI keeps response signatures for later lookup. Its gateway only sees the email encrypted, and the model reads it inside its TEE.
+
+## Verification policy
+
+NEAR AI's docs ask each app to [decide what it accepts](https://docs.near.ai/cloud/verification/reference/verification-policy). Anything required that's missing, malformed or unavailable counts as failed.
+
+| Decision | Blind Teller's rule |
+|---|---|
+| Order of checks | The gateway first, then every model report returned |
+| Intel TDX | A verified quote with TCB status `UpToDate` only |
+| Debug mode | Refused |
+| Signer | `ed25519` only. The verified quote must bind both the key and our nonce |
+| GPU evidence | Required for models. NVIDIA's verdict must be `true`, cover our nonce and carry a valid NVIDIA signature |
+| Measurements | Each report must match its own compose hash and RTMR3 log. Hashes aren't allowlisted, because they vary across NEAR AI's replicas while keys stay the same |
+| Evidence age | In the browser, a fresh nonce on every run. On-chain, a model key stays valid for 14 days after its proof |
+| Response signature | Required. It must be `provider_tee`, from the model's proven key, over the exact request and response bytes |
+| Image provenance | Not required. `scripts/smoke.ts` reports it, using NEAR's SDK |
+| TLS binding | Not required. Browsers can't check it, and the email is encrypted to the model's key anyway |
+
 ## Check it yourself
 
 These commands use public data only. They need no keys or account.
@@ -97,6 +125,14 @@ npx tsx scripts/verify.ts 9 <attestation url>
 
 That adds the active Wasm hash on `outlayer.testnet`, the project id, Intel's signature on the worker's quote, debug mode, the worker's measurements on-chain, and OutLayer's task hash in the quote. Exit code 0 means every check passed. Sandbox orders exit 1 by design, because the *read by the two private models* check fails for them.
 
+To check NEAR AI itself from the command line:
+
+```bash
+npx tsx scripts/smoke.ts
+```
+
+It runs the same checks as the **Proof** page, then repeats attestation with NEAR's official SDK and reports image provenance. With a NEAR AI key it also sends one encrypted completion to each model and verifies its signature.
+
 ## Real mail test
 
 On 7 Nov 2026 we sent 14 fresh messages from public Linux kernel mailing lists through the deployed enclave, using `web/scripts/inspect.ts`.
@@ -110,7 +146,7 @@ A separate December 2025 Gmail message came back `dkim_key_revoked`, because Goo
 
 ## Run it locally
 
-Needs Node 24. The page talks to the contracts already on testnet.
+Needs Node 24.22 or later. The page talks to the contracts already on testnet.
 
 ```bash
 cd web
@@ -134,7 +170,7 @@ cargo test -p blind-teller-enclave --features dev-extractor
 cd web && npx vitest run
 ```
 
-That's 169 tests. They cover the contracts, DKIM, sealing, E2EE against NEAR's vectors, 32 pipeline and attack cases, and shared vectors across Rust and TypeScript. [The threat model](docs/THREAT_MODEL.md) names the test behind each attack.
+That's 187 tests. They cover the contracts, DKIM, sealing, E2EE against NEAR's vectors, 35 pipeline and attack cases, the Verified panel's failure paths, and shared vectors across Rust and TypeScript. [The threat model](docs/THREAT_MODEL.md) names the test behind each attack.
 
 To deploy your own copy, you need a funded testnet account in the NEAR CLI keychain and about 10 NEAR. Build the contracts with `cargo near build non-reproducible-wasm --no-abi` in each contract folder, then:
 
@@ -146,7 +182,7 @@ BT_CONTRACT=teller.youraccount.testnet cargo build -p blind-teller-enclave --tar
 cd web && BT_ROOT=youraccount.testnet npx tsx scripts/deploy.ts
 ```
 
-To turn on the real models, run `npx tsx scripts/set-model-key.ts` in `web` and paste your NEAR AI key at the hidden prompt. It encrypts the key to OutLayer's keystore. Never put the key in a file.
+To turn on the real models, run `npx tsx scripts/set-model-key.ts` in `web` and paste your NEAR AI key at the hidden prompt. You can instead copy `web/.env.example` to `web/.env`, which git ignores. The script runs `scripts/smoke.ts`, then encrypts the key to OutLayer's keystore, which is the only place the enclave reads it from. It stores nothing if NEAR AI refuses the key.
 
 ## Deployed on testnet
 
@@ -155,7 +191,7 @@ To turn on the real models, run `npx tsx scripts/set-model-key.ts` in `web` and 
 | Escrow | [`teller.blindteller.testnet`](https://testnet.nearblocks.io/address/teller.blindteller.testnet) |
 | Model registry | [`models.blindteller.testnet`](https://testnet.nearblocks.io/address/models.blindteller.testnet) |
 | Enclave project | `blindteller.testnet/teller` on `outlayer.testnet` |
-| Enclave build | `c6f3724e65a3ecf45d950c30de115e1ecb08e3039f84bc4ff0cf7464411a6c85` |
+| Enclave build | `55cd593849b60a3dedb989807ed936bb941a01a92fee1b1e30e3b0c7bd862cd8` |
 | Token | `usdc.fakes.testnet` |
 | Quote verifier | `tee-verifier-2026-11-02.testnet` |
 | Website | On NEAR through FastFS, under `blindteller.testnet` |
@@ -198,11 +234,11 @@ Read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full list. The main on
 
 **Baseline:** nothing here predates the hackathon. The first commit is dated 7 Nov 2026, and there's no earlier code or template.
 
-**AI code:** the code, tests and docs were written with Claude Code (Claude Opus 5.5).
+**AI code:** the code, tests and docs were written with Claude Code (Claude Opus 5.5), which also read the guides in NEAR's `near-ai-cloud` agent skill and NEAR AI's verification docs.
 
 **Rust:** `near-sdk`, `borsh`, `rsa`, `ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`, `hkdf`, `sha2`, `serde`, `serde_json`, `hex`, `base64`, `getrandom`, `outlayer`, `wasi-http-client`.
 
-**Web:** `react`, `@noble/ciphers`, `@noble/curves`, `@noble/hashes`, `@phala/dcap-qvl`, `vite`, `vitest`, `tsx`, `typescript`.
+**Web:** `react`, `@noble/ciphers`, `@noble/curves`, `@noble/hashes`, `@phala/dcap-qvl`, `vite`, `vitest`, `tsx`, `typescript`. `@nearai/inference-sdk` is used only by `scripts/smoke.ts`, as an independent check.
 
 **Services:** OutLayer, NEAR AI Cloud, `tee-verifier`, FastFS, the NEAR Intents 1Click API, Google and Cloudflare DNS-over-HTTPS, Phala's PCCS mirror, and NVIDIA's attestation service.
 

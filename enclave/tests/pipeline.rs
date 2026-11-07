@@ -5,7 +5,7 @@
 
 #![cfg(feature = "dev-extractor")]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -43,11 +43,12 @@ struct Mock {
     responses: RefCell<VecDeque<HttpResponse>>,
     requests: RefCell<Vec<HttpRequest>>,
     api_key: Option<String>,
+    sleeps: Cell<u32>,
 }
 
 impl Mock {
     fn new() -> Self {
-        Self { key: SigningKey::from_bytes(&[42u8; 32]), responses: RefCell::new(VecDeque::new()), requests: RefCell::new(vec![]), api_key: None }
+        Self { key: SigningKey::from_bytes(&[42u8; 32]), responses: RefCell::new(VecDeque::new()), requests: RefCell::new(vec![]), api_key: None, sleeps: Cell::new(0) }
     }
 }
 
@@ -71,6 +72,9 @@ impl Host for Mock {
     }
     fn secret(&self, name: &str) -> Option<String> {
         (name == "NEAR_AI_API_KEY").then(|| self.api_key.clone()).flatten()
+    }
+    fn sleep_ms(&self, _: u64) {
+        self.sleeps.set(self.sleeps.get() + 1);
     }
 }
 
@@ -282,6 +286,15 @@ fn model_key(seed: u8) -> SigningKey {
 /// key, and sign the exchange. Needs the request, so the host records it first.
 struct ModelServer {
     host: Mock,
+    /// What the signature lookup answers before the real signature arrives.
+    late: RefCell<VecDeque<HttpResponse>>,
+    finish_reason: &'static str,
+}
+
+impl ModelServer {
+    fn new(host: Mock) -> Self {
+        Self { host, late: RefCell::new(VecDeque::new()), finish_reason: "stop" }
+    }
 }
 
 impl Host for ModelServer {
@@ -300,6 +313,9 @@ impl Host for ModelServer {
     fn secret(&self, n: &str) -> Option<String> {
         self.host.secret(n)
     }
+    fn sleep_ms(&self, ms: u64) {
+        self.host.sleep_ms(ms)
+    }
     fn http(&self, request: HttpRequest) -> Result<HttpResponse, String> {
         thread_local! { static LAST: RefCell<Option<(Vec<u8>, Vec<u8>, String, u8)>> = const { RefCell::new(None) }; }
         if request.url.ends_with("/chat/completions") {
@@ -317,11 +333,14 @@ impl Host for ModelServer {
             let reply = json!({ "status": "success", "direction": "debit", "amount": "8,850.37", "currency": "INR",
                                 "recipient": "asha.rao@meridian", "note": "BT order 3", "balance": "42,310.05", "injection": false }).to_string();
             let ct = e2ee::encrypt(&reply_key, &reply, &[], &[9u8; 56]).unwrap();
-            let response = serde_json::to_vec(&json!({ "id": "chat-1", "choices": [{ "message": { "role": "assistant", "content": ct } }] })).unwrap();
+            let response = serde_json::to_vec(&json!({ "id": "chat-1", "choices": [{ "message": { "role": "assistant", "content": ct }, "finish_reason": self.finish_reason }] })).unwrap();
             LAST.with(|l| *l.borrow_mut() = Some((request.body.clone(), response.clone(), model, seed)));
             return Ok(HttpResponse { status: 200, body: response });
         }
         assert!(request.url.contains("/signature/chat-1"));
+        if let Some(early) = self.late.borrow_mut().pop_front() {
+            return Ok(early);
+        }
         let (req, res, model, seed) = LAST.with(|l| l.borrow().clone()).unwrap();
         let text = format!("{model}:{}:{}", hex::encode(Sha256::digest(&req)), hex::encode(Sha256::digest(&res)));
         let key = model_key(seed);
@@ -354,10 +373,48 @@ fn the_model_path_runs_end_to_end_and_names_both_keys() {
     host.api_key = Some("test-key".into());
     let raw = sign_bank(&email("8,850.37", "BT order 3"));
     let i = model_input(&host, &raw, model_refs());
-    let out = pipeline::prove(&ModelServer { host }, i);
+    let out = pipeline::prove(&ModelServer::new(host), i);
     assert_eq!(out["ok"], true, "{out}");
     assert_eq!(out["verdict"]["extractor"], "near-ai");
     assert_eq!(out["verdict"]["model_keys"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn a_signature_that_arrives_late_is_waited_for() {
+    let mut host = Mock::new();
+    host.api_key = Some("test-key".into());
+    let raw = sign_bank(&email("8,850.37", "BT order 3"));
+    let i = model_input(&host, &raw, model_refs());
+    let server = ModelServer::new(host);
+    server.late.borrow_mut().extend([
+        HttpResponse { status: 404, body: vec![] },
+        HttpResponse { status: 200, body: br#"{"error_code":"not_found","message":"unavailable"}"#.to_vec() },
+    ]);
+    let out = pipeline::prove(&server, i);
+    assert_eq!(out["ok"], true, "{out}");
+    assert_eq!(server.host.sleeps.get(), 2);
+}
+
+#[test]
+fn a_signature_that_never_arrives_is_refused() {
+    let mut host = Mock::new();
+    host.api_key = Some("test-key".into());
+    let raw = sign_bank(&email("8,850.37", "BT order 3"));
+    let i = model_input(&host, &raw, model_refs());
+    let server = ModelServer::new(host);
+    server.late.borrow_mut().extend((0..5).map(|_| HttpResponse { status: 404, body: vec![] }));
+    assert_eq!(code(&pipeline::prove(&server, i)), "model_signature_missing");
+    assert_eq!(server.host.sleeps.get(), 4);
+}
+
+#[test]
+fn a_reply_cut_off_by_the_token_limit_is_refused() {
+    let mut host = Mock::new();
+    host.api_key = Some("test-key".into());
+    let raw = sign_bank(&email("8,850.37", "BT order 3"));
+    let i = model_input(&host, &raw, model_refs());
+    let server = ModelServer { finish_reason: "length", ..ModelServer::new(host) };
+    assert_eq!(code(&pipeline::prove(&server, i)), "model_reply_truncated");
 }
 
 #[test]
