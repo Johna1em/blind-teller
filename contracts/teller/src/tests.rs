@@ -252,8 +252,111 @@ fn cancelling_returns_the_funds_to_the_offer() {
     let offer = t.get_offer(U64(0)).unwrap();
     assert_eq!(offer.available.0, 1_000_000_000);
     assert_eq!(offer.locked.0, 0);
-    assert_eq!(offer.open_orders, 0);
+    assert!(offer.open_ids.is_empty());
     assert_eq!(t.get_order(id).unwrap().status, OrderStatus::Cancelled);
+}
+
+#[test]
+fn abandoned_orders_are_swept_so_they_cannot_block_the_board() {
+    let mut t = funded(true);
+    ctx("buyer.testnet", T0, 0);
+    for _ in 0..MAX_OPEN_PER_OFFER {
+        t.take_offer(U64(0), U128(1_000_000), "22".repeat(32));
+    }
+    assert_eq!(t.get_offer(U64(0)).unwrap().open_ids.len(), MAX_OPEN_PER_OFFER);
+    let lapsed = t.get_order(U64(0)).unwrap().deadline_ms.0 + GRACE_MS + 1;
+    ctx("buyer.testnet", lapsed, 0);
+    let next = t.take_offer(U64(0), U128(1_000_000), "22".repeat(32));
+    let offer = t.get_offer(U64(0)).unwrap();
+    assert_eq!(offer.open_ids, vec![next]);
+    assert_eq!(offer.locked.0, 1_000_000);
+    assert_eq!(t.get_order(U64(0)).unwrap().status, OrderStatus::Expired);
+}
+
+#[test]
+#[should_panic(expected = "this offer has too many open orders")]
+fn live_orders_are_not_swept() {
+    let mut t = funded(true);
+    ctx("buyer.testnet", T0, 0);
+    for _ in 0..=MAX_OPEN_PER_OFFER {
+        t.take_offer(U64(0), U128(1_000_000), "22".repeat(32));
+    }
+}
+
+#[test]
+fn a_settled_order_keeps_its_verdict_for_anyone_to_recheck() {
+    let (mut t, id) = with_order(true);
+    let v = dev(&t, id, &"aa".repeat(32));
+    ctx("relayer.testnet", T0 + 3_000, 0);
+    t.settle(id, v.clone());
+    let o = t.get_order(id).unwrap();
+    assert_eq!(o.verdict_signature, Some(v.signature));
+    assert_eq!(o.verdict_issued_ms, Some(v.issued_ms));
+}
+
+/// Drive `on_paid` the way the runtime does, with the transfer's outcome set.
+fn paid(t: &mut Teller, id: U64, ok: bool) -> bool {
+    use near_sdk::PromiseResult;
+    let result = if ok { PromiseResult::Successful(vec![]) } else { PromiseResult::Failed };
+    testing_env!(
+        VMContextBuilder::new()
+            .current_account_id(contract_id())
+            .predecessor_account_id(contract_id())
+            .block_timestamp((T0 + 4_000) * 1_000_000)
+            .prepaid_gas(Gas::from_tgas(100))
+            .build(),
+        near_sdk::test_vm_config(),
+        near_sdk::RuntimeFeesConfig::test(),
+        Default::default(),
+        vec![result]
+    );
+    t.on_paid(id, if ok { Ok(()) } else { Err(PromiseError::Failed) })
+}
+
+#[test]
+fn a_failed_payout_can_be_retried_and_still_closes_the_order() {
+    let (mut t, id) = with_order(true);
+    let v = dev(&t, id, &"aa".repeat(32));
+    ctx("relayer.testnet", T0 + 3_000, 0);
+    t.settle(id, v);
+    assert!(!paid(&mut t, id, false));
+    assert_eq!(t.get_order(id).unwrap().status, OrderStatus::PayoutFailed);
+    assert_eq!(t.get_config().settled.0, 0);
+
+    assert!(paid(&mut t, id, true));
+    let order = t.get_order(id).unwrap();
+    assert_eq!(order.status, OrderStatus::Settled);
+    let offer = t.get_offer(U64(0)).unwrap();
+    assert_eq!(offer.locked.0, 0, "the lock must clear on a retry too");
+    assert!(offer.open_ids.is_empty());
+    assert_eq!(t.get_config().settled.0, 1);
+    assert_eq!(t.get_config().fees_accrued.0, 250_000);
+}
+
+#[test]
+fn a_seller_can_only_withdraw_what_is_unlocked() {
+    let (mut t, _) = with_order(true);
+    ctx("seller.testnet", T0 + 2_000, 1);
+    t.withdraw_offer(U64(0));
+    let offer = t.get_offer(U64(0)).unwrap();
+    assert_eq!(offer.available.0, 0);
+    assert_eq!(offer.locked.0, 100_000_000);
+}
+
+#[test]
+#[should_panic(expected = "only the seller can withdraw")]
+fn a_stranger_cannot_withdraw_an_offer() {
+    let mut t = funded(true);
+    ctx("evil.testnet", T0, 1);
+    t.withdraw_offer(U64(0));
+}
+
+#[test]
+#[should_panic(expected = "only the owner")]
+fn a_stranger_cannot_take_the_fees() {
+    let mut t = funded(true);
+    ctx("evil.testnet", T0, 1);
+    t.withdraw_fees(acct("evil.testnet"));
 }
 
 #[test]

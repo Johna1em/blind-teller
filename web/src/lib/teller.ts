@@ -22,7 +22,7 @@ export interface Offer {
   payee_commit: string;
   buyer_bond: string;
   window_minutes: number;
-  open_orders: number;
+  open_ids: string[];
   created_ms: string;
 }
 

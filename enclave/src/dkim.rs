@@ -548,8 +548,8 @@ mod tests {
 
     /// A message signed by Google's real servers, with Google's real key. It
     /// runs when `BT_REAL_EML` (a path) and `BT_REAL_KEY` (the DNS `p=` value)
-    /// are set; `npm run test:real-dkim` does that. A signer of our own can't
-    /// catch a shared misreading of the RFC. This can.
+    /// are set. A signer of our own can't catch a shared misreading of the RFC.
+    /// This can, and it did: it's why unsigned `Content-Type` isn't refused.
     #[test]
     fn a_real_gmail_message_verifies() {
         let (Ok(path), Ok(key)) = (std::env::var("BT_REAL_EML"), std::env::var("BT_REAL_KEY")) else {

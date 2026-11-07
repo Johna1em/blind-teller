@@ -40,7 +40,7 @@ const CLOCK_SKEW_MS: u64 = 5 * 60_000;
 const MAX_WINDOW_MINUTES: u32 = 24 * 60;
 const MIN_WINDOW_MINUTES: u32 = 5;
 const MAX_TAG: u64 = 99;
-const MAX_OPEN_PER_OFFER: u32 = 20;
+const MAX_OPEN_PER_OFFER: usize = 20;
 const MAX_SEALED_PAYEE: usize = 1_024;
 const MAX_MODEL_KEYS: usize = 3;
 const MAX_FEE_BPS: u16 = 200;
@@ -101,7 +101,7 @@ pub struct Offer {
     /// Refundable NEAR bond a buyer attaches, in yoctoNEAR.
     pub buyer_bond: U128,
     pub window_minutes: u32,
-    pub open_orders: u32,
+    pub open_ids: Vec<U64>,
     pub created_ms: U64,
 }
 
@@ -307,7 +307,7 @@ impl Teller {
                 payee_commit: n.payee_commit,
                 buyer_bond: n.buyer_bond.unwrap_or(U128(0)),
                 window_minutes: window,
-                open_orders: 0,
+                open_ids: vec![],
                 created_ms: U64(now_ms()),
             },
         );
@@ -322,12 +322,13 @@ impl Teller {
     #[payable]
     pub fn take_offer(&mut self, offer_id: U64, amount: U128, buyer_pubkey: String) -> U64 {
         hex32(&buyer_pubkey, "buyer_pubkey");
+        self.sweep(offer_id.0);
         let mut offer = self.offers.get(&offer_id.0).cloned().unwrap_or_else(|| env::panic_str("no such offer"));
         let buyer = env::predecessor_account_id();
         require!(buyer != offer.seller, "you can't take your own offer");
         require!(amount.0 >= offer.min_amount.0 && amount.0 <= offer.max_amount.0, "amount is outside this offer's limits");
         require!(amount.0 <= offer.available.0, "the offer doesn't have that much left");
-        require!(offer.open_orders < MAX_OPEN_PER_OFFER, "this offer has too many open orders");
+        require!(offer.open_ids.len() < MAX_OPEN_PER_OFFER, "this offer has too many open orders");
         let bond = env::attached_deposit();
         require!(bond.as_yoctonear() >= offer.buyer_bond.0, "attach the offer's buyer bond");
 
@@ -338,12 +339,12 @@ impl Teller {
             .find(|fiat| !self.open_amounts.contains(&(offer_id.0, *fiat)))
             .unwrap_or_else(|| env::panic_str("no free amount tag on this offer; try again shortly"));
 
-        offer.available = U128(offer.available.0 - amount.0);
-        offer.locked = U128(offer.locked.0 + amount.0);
-        offer.open_orders += 1;
-
         let id = self.next_order;
         self.next_order += 1;
+        offer.available = U128(offer.available.0 - amount.0);
+        offer.locked = U128(offer.locked.0 + amount.0);
+        offer.open_ids.push(U64(id));
+
         let created = now_ms();
         let order = Order {
             offer_id,
@@ -466,16 +467,14 @@ impl Teller {
             event("payout_failed", serde_json::json!({ "order_id": order_id }));
             return false;
         }
-        let was_retry = order.status == OrderStatus::PayoutFailed;
+        // A failed payout left the order on its offer, so this runs exactly once
+        // whether the transfer worked first time or on a retry.
         order.status = OrderStatus::Settled;
         order.settled_ms = Some(U64(now_ms()));
-        if !was_retry {
-            let fee = self.fee_on(order.token_amount.0);
-            self.fees_accrued += fee;
-            self.settled += 1;
-            self.volume += order.token_amount.0;
-            self.close_order_on_offer(&order);
-        }
+        self.fees_accrued += self.fee_on(order.token_amount.0);
+        self.settled += 1;
+        self.volume += order.token_amount.0;
+        self.close_order_on_offer(order_id.0, &order);
         let bond = order.bond.0;
         let buyer = order.buyer.clone();
         order.bond = U128(0);
@@ -501,7 +500,7 @@ impl Teller {
         let mut order = self.order(order_id.0);
         require!(env::predecessor_account_id() == order.buyer, "only the buyer can cancel");
         require!(order.status == OrderStatus::Open, "this order isn't open");
-        self.release(&order);
+        self.release(order_id.0, &order);
         let bond = order.bond.0;
         let buyer = order.buyer.clone();
         order.status = OrderStatus::Cancelled;
@@ -516,19 +515,10 @@ impl Teller {
     /// Release an unproven order after its deadline and grace. Open to anyone.
     /// The bond goes to the seller, whose funds sat locked.
     pub fn expire_order(&mut self, order_id: U64) {
-        let mut order = self.order(order_id.0);
+        let order = self.order(order_id.0);
         require!(order.status == OrderStatus::Open, "this order isn't open");
         require!(now_ms() > order.deadline_ms.0 + GRACE_MS, "this order hasn't expired");
-        self.release(&order);
-        let bond = order.bond.0;
-        let seller = order.seller.clone();
-        order.status = OrderStatus::Expired;
-        order.bond = U128(0);
-        self.orders.insert(order_id.0, order);
-        if bond > 0 {
-            Promise::new(seller).transfer(NearToken::from_yoctonear(bond)).detach();
-        }
-        event("order_expired", serde_json::json!({ "order_id": order_id }));
+        self.expire(order_id.0);
     }
 
     /// The seller takes back whatever isn't locked in an order.
@@ -547,6 +537,40 @@ impl Teller {
             .with_attached_deposit(ONE_YOCTO)
             .with_static_gas(GAS_FT_TRANSFER)
             .ft_transfer(seller, amount, Some("blind teller withdrawal".into()))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_ON_PAID).on_withdrawn(offer_id, amount))
+    }
+
+    /// A failed withdrawal puts the funds back on the offer instead of losing them.
+    #[private]
+    pub fn on_withdrawn(&mut self, offer_id: U64, amount: U128, #[callback_result] sent: Result<(), PromiseError>) {
+        if sent.is_err() {
+            if let Some(mut offer) = self.offers.get(&offer_id.0).cloned() {
+                offer.available = U128(offer.available.0 + amount.0);
+                self.offers.insert(offer_id.0, offer);
+            }
+        }
+    }
+
+    /// The owner collects settled fees. Only fees: seller funds aren't reachable.
+    #[payable]
+    pub fn withdraw_fees(&mut self, receiver: AccountId) -> Promise {
+        near_sdk::assert_one_yocto();
+        self.assert_owner();
+        let amount = self.fees_accrued;
+        require!(amount > 0, "no fees to withdraw");
+        self.fees_accrued = 0;
+        ext_ft::ext(self.token.clone())
+            .with_attached_deposit(ONE_YOCTO)
+            .with_static_gas(GAS_FT_TRANSFER)
+            .ft_transfer(receiver, U128(amount), Some("blind teller fees".into()))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_ON_PAID).on_fees_withdrawn(U128(amount)))
+    }
+
+    #[private]
+    pub fn on_fees_withdrawn(&mut self, amount: U128, #[callback_result] sent: Result<(), PromiseError>) {
+        if sent.is_err() {
+            self.fees_accrued += amount.0;
+        }
     }
 
     // ---- views ----
@@ -645,24 +669,51 @@ impl Teller {
     }
 
     /// Take a closed order off its offer without returning funds to it.
-    fn close_order_on_offer(&mut self, order: &Order) {
+    fn close_order_on_offer(&mut self, order_id: u64, order: &Order) {
         if let Some(mut offer) = self.offers.get(&order.offer_id.0).cloned() {
             offer.locked = U128(offer.locked.0 - order.token_amount.0);
-            offer.open_orders -= 1;
+            offer.open_ids.retain(|id| id.0 != order_id);
             self.offers.insert(order.offer_id.0, offer);
         }
         self.open_amounts.remove(&(order.offer_id.0, order.fiat_minor.0));
     }
 
     /// Return an order's funds to its offer.
-    fn release(&mut self, order: &Order) {
+    fn release(&mut self, order_id: u64, order: &Order) {
         if let Some(mut offer) = self.offers.get(&order.offer_id.0).cloned() {
             offer.available = U128(offer.available.0 + order.token_amount.0);
             offer.locked = U128(offer.locked.0 - order.token_amount.0);
-            offer.open_orders -= 1;
+            offer.open_ids.retain(|id| id.0 != order_id);
             self.offers.insert(order.offer_id.0, offer);
         }
         self.open_amounts.remove(&(order.offer_id.0, order.fiat_minor.0));
+    }
+
+    /// Close an unproven order. The bond goes to the seller, whose funds sat locked.
+    fn expire(&mut self, order_id: u64) {
+        let mut order = self.order(order_id);
+        self.release(order_id, &order);
+        let bond = order.bond.0;
+        let seller = order.seller.clone();
+        order.status = OrderStatus::Expired;
+        order.bond = U128(0);
+        self.orders.insert(order_id, order);
+        if bond > 0 {
+            Promise::new(seller).transfer(NearToken::from_yoctonear(bond)).detach();
+        }
+        event("order_expired", serde_json::json!({ "order_id": U64(order_id) }));
+    }
+
+    /// Clear this offer's lapsed orders, so abandoned orders can't fill its slots
+    /// and block the board until someone remembers to expire them.
+    fn sweep(&mut self, offer_id: u64) {
+        let open = self.offers.get(&offer_id).map_or_else(Vec::new, |o| o.open_ids.clone());
+        for id in open {
+            let order = self.order(id.0);
+            if order.status == OrderStatus::Open && now_ms() > order.deadline_ms.0 + GRACE_MS {
+                self.expire(id.0);
+            }
+        }
     }
 }
 
