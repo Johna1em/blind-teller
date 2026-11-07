@@ -24,7 +24,7 @@ use near_sdk::json_types::{Base64VecU8, U64};
 use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{
     env, log, near, require, serde_json, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault,
-    Promise, PromiseResult,
+    Promise,
 };
 
 /// `verify_quote` burns about 176 Tgas on mainnet.
@@ -32,7 +32,7 @@ const GAS_VERIFY: Gas = Gas::from_tgas(220);
 const GAS_ON_VERIFIED: Gas = Gas::from_tgas(15);
 const NONCE_TTL_MS: u64 = 15 * 60_000;
 /// How long a proven key stays attested. Refreshing is open to anyone.
-const KEY_TTL_MS: u64 = 7 * 24 * 60 * 60_000;
+const KEY_TTL_MS: u64 = 14 * 24 * 60 * 60_000;
 const MAX_MODEL_LABEL: usize = 96;
 const MAX_RESULT_BYTES: usize = 64 * 1024;
 
@@ -274,9 +274,9 @@ impl Registry {
             Promise::new(relayer.clone()).transfer(NearToken::from_yoctonear(deposit.0)).detach();
             false
         };
-        let bytes = match env::promise_result(0) {
-            PromiseResult::Successful(b) if b.len() <= MAX_RESULT_BYTES => b,
-            _ => return refund("tee-verifier didn't answer"),
+        let bytes = match env::promise_result_checked(0, MAX_RESULT_BYTES) {
+            Ok(b) => b,
+            Err(_) => return refund("tee-verifier didn't answer"),
         };
         let report = match VerificationResult::try_from_slice(&bytes) {
             Ok(VerificationResult::Verified(r)) => r,

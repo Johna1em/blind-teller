@@ -68,6 +68,12 @@ The seller's sealed payee record is stored on-chain as ciphertext. It holds a pa
 
 **Bank coverage.** The issuers on the real rails in `enclave/src/policy.rs` are candidates, unverified until tested with a real sample. Some banks send no email, some users get SMS only, and a signing domain can belong to a mail vendor such as SendGrid.
 
+**Short signing keys.** The enclave refuses RSA keys under 2048 bits. In our test of 14 fresh emails, 5 senders still used shorter keys. A bank that signs with one can't join a rail until it upgrades, because a 1024-bit key is within reach of a funded attacker.
+
+**Key rotation.** A sender can stop publishing an old key, and the email can no longer be checked. Our December 2025 Gmail sample fails this way today. Buyers must prove payment soon after paying, which the order window already requires.
+
+**Public demo keys.** The hosted site ships a buyer key and an OutLayer payment key, so judges can try it with no wallet. The buyer key can call only `take_offer` and `settle`, with a 0.3 NEAR gas cap. The payment key holds test credit. Anyone could use up either one. They can't take funds, because payment still needs a valid verdict. A production site wouldn't ship them.
+
 **Tainted funds.** A seller can receive stolen money and have an account frozen. Nothing here solves that.
 
 **Counterparties see each other.** Bank rails show the payer to the payee.

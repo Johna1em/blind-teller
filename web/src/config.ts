@@ -35,11 +35,19 @@ export const DEMO = {
   paymentKey: '',
 };
 
+/** A fresh clone has no demo.json, so it uses the public one from the hosted site. */
+const HOSTED_DEMO = 'https://test.fastfs.io/blindteller.testnet/blindteller.testnet/demo.json';
+
 export async function loadDemo(): Promise<void> {
-  try {
-    const response = await fetch('./demo.json');
-    if (response.ok) Object.assign(DEMO, await response.json());
-  } catch {
-    // The page still reads the chain without it.
+  for (const url of ['./demo.json', HOSTED_DEMO]) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        Object.assign(DEMO, await response.json());
+        return;
+      }
+    } catch {
+      // Try the next one. The page still reads the chain without either.
+    }
   }
 }
