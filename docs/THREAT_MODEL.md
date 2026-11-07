@@ -60,7 +60,7 @@ The seller's sealed payee record is stored on-chain as ciphertext. It holds a pa
 
 ## Known limits
 
-**The note attack isn't fully closed.** A note that fools both models about what the note is, in the same way, while the email's other amounts are all explained, could pass. Per-order caps limit the damage. A production system should keep per-issuer format hints and a seller dispute window.
+**The note attack isn't fully closed.** A note that fools both models about what the note is, in the same way, while the email's other amounts are all explained, could pass. In live testing 18 harder attacks were refused (`web/scripts/redteam.ts`), but that's evidence, not proof. Per-order caps limit the damage. A production system should keep per-issuer format hints and a seller dispute window.
 
 **Re-rolls.** Anyone can call the enclave again with the same email and keep the best result. The output for a given email should be stable, and a value must appear in the source to count, but a one-shot limit in sealed storage would close this properly. It isn't built.
 

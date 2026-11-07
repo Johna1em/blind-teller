@@ -21,7 +21,7 @@ default = []
 # deployed without `allow_dev` refuses them.
 dev-extractor = []
 # The real host: OutLayer signing keys and WASI HTTP. Only on wasm32-wasip2.
-wasi = ["dep:outlayer", "dep:wasi-http-client"]
+wasi = ["dep:outlayer", "dep:wasi"]
 
 [dependencies]
 teller-core.workspace = true
@@ -37,7 +37,7 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 rsa = { version = "0.9", default-features = false, features = ["std", "sha2"] }
 getrandom = "0.2"
 outlayer = { version = "0.2", features = ["signing-keys"], optional = true }
-wasi-http-client = { version = "0.2", optional = true }
+wasi = { version = "0.13", optional = true }
 
 [dev-dependencies]
 rand = "0.8"

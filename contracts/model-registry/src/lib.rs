@@ -32,7 +32,7 @@ const GAS_VERIFY: Gas = Gas::from_tgas(220);
 const GAS_ON_VERIFIED: Gas = Gas::from_tgas(15);
 const NONCE_TTL_MS: u64 = 15 * 60_000;
 /// How long a proven key stays attested. Refreshing is open to anyone.
-const KEY_TTL_MS: u64 = 14 * 24 * 60 * 60_000;
+const KEY_TTL_MS: u64 = 21 * 24 * 60 * 60_000;
 const MAX_MODEL_LABEL: usize = 96;
 const MAX_RESULT_BYTES: usize = 64 * 1024;
 

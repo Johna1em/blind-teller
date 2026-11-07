@@ -19,11 +19,70 @@ mod host {
 
     use enclave::host::{Host, HttpRequest, HttpResponse};
     use outlayer::signing_keys;
-    use wasi_http_client::Client;
+    use wasi::http::outgoing_handler;
+    use wasi::http::types::{Fields, Method, OutgoingBody, OutgoingRequest, RequestOptions, Scheme};
+    use wasi::io::streams::StreamError;
 
     const KEY: &str = "verdict";
+    /// The most one blocking write may carry. A larger write traps and kills the
+    /// run, so a body goes out in pieces. Any email longer than a short receipt
+    /// makes a model request bigger than this.
+    const MAX_WRITE: usize = 4096;
+    const MAX_READ: u64 = 1024 * 1024;
 
     pub struct OutLayer;
+
+    fn fail(e: impl std::fmt::Debug) -> String {
+        format!("{e:?}")
+    }
+
+    fn send(request: HttpRequest) -> Result<HttpResponse, String> {
+        let rest = request.url.strip_prefix("https://").ok_or("only https is allowed")?;
+        let (authority, path) = rest.find('/').map_or((rest, "/"), |slash| rest.split_at(slash));
+
+        let headers = Fields::new();
+        for (name, value) in &request.headers {
+            headers.set(name, &[value.clone().into_bytes()]).map_err(fail)?;
+        }
+        let outgoing = OutgoingRequest::new(headers);
+        outgoing.set_method(if request.method == "GET" { &Method::Get } else { &Method::Post }).map_err(fail)?;
+        outgoing.set_scheme(Some(&Scheme::Https)).map_err(fail)?;
+        outgoing.set_authority(Some(authority)).map_err(fail)?;
+        outgoing.set_path_with_query(Some(path)).map_err(fail)?;
+
+        let body = outgoing.body().map_err(fail)?;
+        {
+            let stream = body.write().map_err(fail)?;
+            for piece in request.body.chunks(MAX_WRITE) {
+                stream.blocking_write_and_flush(piece).map_err(fail)?;
+            }
+        }
+        OutgoingBody::finish(body, None).map_err(fail)?;
+
+        // The worker enforces per-host limits from the manifest. This only
+        // bounds the connection.
+        let options = RequestOptions::new();
+        let connect = Duration::from_secs(request.timeout_secs.min(15));
+        options.set_connect_timeout(Some(connect.as_nanos() as u64)).map_err(fail)?;
+        let pending = outgoing_handler::handle(outgoing, Some(options)).map_err(fail)?;
+        pending.subscribe().block();
+        let response = pending.get().ok_or("no response")?.map_err(fail)?.map_err(fail)?;
+
+        let status = response.status();
+        let incoming = response.consume().map_err(fail)?;
+        let mut out = Vec::new();
+        {
+            let stream = incoming.stream().map_err(fail)?;
+            loop {
+                match stream.blocking_read(MAX_READ) {
+                    Ok(piece) => out.extend(piece),
+                    Err(StreamError::Closed) => break,
+                    Err(e) => return Err(fail(e)),
+                }
+            }
+        }
+        Ok(HttpResponse { status, body: out })
+    }
 
     impl Host for OutLayer {
         fn now_ms(&self) -> u64 {
@@ -45,23 +104,7 @@ mod host {
         }
 
         fn http(&self, request: HttpRequest) -> Result<HttpResponse, String> {
-            let client = Client::new();
-            let mut builder = match request.method {
-                "GET" => client.get(&request.url),
-                _ => client.post(&request.url),
-            };
-            for (name, value) in &request.headers {
-                builder = builder.header(name.as_str(), value.as_str());
-            }
-            // The worker enforces per-host limits from the manifest; this only
-            // bounds the connection.
-            builder = builder.connect_timeout(Duration::from_secs(request.timeout_secs.min(15)));
-            if !request.body.is_empty() {
-                builder = builder.body(&request.body);
-            }
-            let response = builder.send().map_err(|e| e.to_string())?;
-            let status = response.status();
-            Ok(HttpResponse { status, body: response.body().map_err(|e| e.to_string())? })
+            send(request)
         }
 
         fn secret(&self, name: &str) -> Option<String> {

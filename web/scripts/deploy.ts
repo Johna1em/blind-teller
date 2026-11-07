@@ -148,6 +148,7 @@ async function deployTeller(keys: { seal_public: string; verdict_public: string 
   if (await hasCode(TELLER_ACCOUNT)) {
     deploy(TELLER_ACCOUNT, TELLER_WASM, null);
     await send(root(), TELLER_ACCOUNT, { method: 'set_enclave_keys', args: { verdict_key: keys.verdict_public, seal_key: keys.seal_public }, gas: 30n * TGAS });
+    if (!init.allow_dev) await send(root(), TELLER_ACCOUNT, { method: 'disable_dev', args: {}, gas: 30n * TGAS });
     log('updated teller');
   } else {
     deploy(TELLER_ACCOUNT, TELLER_WASM, { method: 'new', args: init });

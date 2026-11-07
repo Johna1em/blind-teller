@@ -6,12 +6,11 @@
 // With no files, it only checks the enclave can reach what its manifest allows.
 
 import { readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
-import { DEMO } from '../src/config';
+import { basename } from 'node:path';
+import { loadDemo } from '../src/config';
 import { callEnclave, getConfig, inspectEmail } from '../src/lib/teller';
-import { REPO } from './lib';
 
-Object.assign(DEMO, JSON.parse(readFileSync(join(REPO, 'web/public/demo.json'), 'utf8')));
+await loadDemo();
 
 const { output: probe } = await callEnclave({ action: 'probe' });
 console.log('reachability from inside the enclave:', JSON.stringify(probe));

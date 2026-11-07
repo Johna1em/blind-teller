@@ -5,11 +5,11 @@
   "token": "usdc.fakes.testnet",
   "enclave": {
     "project": "blindteller.testnet/teller",
-    "wasm_sha256": "55cd593849b60a3dedb989807ed936bb941a01a92fee1b1e30e3b0c7bd862cd8",
-    "url": "https://test.fastfs.io/blindteller.testnet/outlayer.testnet/55cd593849b60a3dedb989807ed936bb941a01a92fee1b1e30e3b0c7bd862cd8.wasm"
+    "wasm_sha256": "899041fba2c55e7e5ce91b1db6d7d54896486ac6494feba74e1af8928e18f579",
+    "url": "https://test.fastfs.io/blindteller.testnet/outlayer.testnet/899041fba2c55e7e5ce91b1db6d7d54896486ac6494feba74e1af8928e18f579.wasm"
   },
   "keys": {
-    "extractor": "dev-allowed",
+    "extractor": "near-ai-only",
     "models": [
       "z-ai/glm-5.3-flash",
       "Qwen/Qwen3.8-27B"

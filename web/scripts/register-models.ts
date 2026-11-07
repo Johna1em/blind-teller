@@ -3,7 +3,7 @@
 //
 //   npx tsx scripts/register-models.ts
 //
-// A key stays attested for 14 days. Run this again to refresh it.
+// A key stays attested for 21 days. Run this again to refresh it.
 
 import { getCollateral } from '@phala/dcap-qvl';
 import { MODELS, NEAR_AI_API } from '../src/config';
