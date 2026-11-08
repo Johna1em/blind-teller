@@ -256,6 +256,8 @@ Read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full list. The main on
 
 **AI code:** the code, tests and docs were written with Claude Code (Claude Opus 5.5), which also read the guides in NEAR's `near-ai-cloud` agent skill and NEAR AI's verification docs.
 
+**AI voice:** the narration in the demo video is an AI voice, made with the open-source Chatterbox model. It isn't a recording of a person. The footage is a real run on the hosted testnet site, and waits that were sped up are labelled on screen.
+
 **Rust:** `near-sdk`, `borsh`, `rsa`, `ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`, `hkdf`, `sha2`, `serde`, `serde_json`, `hex`, `base64`, `getrandom`, `outlayer`, `wasi`.
 
 **Web:** `react`, `@noble/ciphers`, `@noble/curves`, `@noble/hashes`, `@phala/dcap-qvl`, `vite`, `vitest`, `tsx`, `typescript`. `@nearai/inference-sdk` is used only by `scripts/smoke.ts`, as an independent check.
