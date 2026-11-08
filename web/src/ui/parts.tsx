@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { EXPLORER, TOKEN_DECIMALS } from '../config';
+import { Icon } from './Art';
 
 export function Stamp({ kind, children }: { kind: 'paid' | 'refused'; children: ReactNode }) {
   return <div className={`stamp stamp-${kind}`} role="status">{children}</div>;
@@ -16,11 +17,12 @@ export function Ticket({ children, label }: { children: ReactNode; label?: strin
 export type StepState = 'wait' | 'run' | 'pass' | 'fail';
 
 export function Step({ state, label, detail }: { state: StepState; label: string; detail?: string }) {
-  const mark = state === 'pass' ? '✓' : state === 'fail' ? '✕' : state === 'run' ? '…' : '';
   return (
     <li className={`step step-${state}`}>
-      <span className="step-mark" aria-hidden="true">{mark}</span>
-      <span>
+      <span className="step-mark" aria-hidden="true">
+        {state === 'pass' ? <Icon name="check" size={13} /> : state === 'fail' ? <Icon name="x" size={13} /> : null}
+      </span>
+      <span className="step-text">
         {label}
         {detail ? <small>{detail}</small> : null}
       </span>

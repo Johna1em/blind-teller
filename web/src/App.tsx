@@ -5,6 +5,7 @@ import { Cheat } from './ui/Cheat';
 import { How } from './ui/How';
 import { Proof } from './ui/Proof';
 import { Window } from './ui/Window';
+import { Mark } from './ui/Art';
 
 const ROUTES = [
   { hash: '#/', label: 'The window' },
@@ -39,15 +40,18 @@ export function App() {
     <>
       <a className="skip" href="#main">Skip to content</a>
       <header className="masthead">
-        <a className="nameplate" href="#/" aria-label="Blind Teller home">
-          <span className="grille" aria-hidden="true" />
-          <span>Blind Teller</span>
-        </a>
-        <nav aria-label="Main">
-          {ROUTES.map((r) => (
-            <a key={r.hash} href={r.hash} aria-current={route === r.hash ? 'page' : undefined}>{r.label}</a>
-          ))}
-        </nav>
+        <div className="masthead-in">
+          <a className="nameplate" href="#/" aria-label="Blind Teller home">
+            <Mark />
+            <span>Blind Teller</span>
+          </a>
+          <nav aria-label="Main">
+            {ROUTES.map((r) => (
+              <a key={r.hash} href={r.hash} aria-current={route === r.hash ? 'page' : undefined}>{r.label}</a>
+            ))}
+          </nav>
+          <span className="netchip"><span className="netdot" aria-hidden="true" />NEAR testnet</span>
+        </div>
       </header>
 
       <main id="main">
@@ -55,8 +59,10 @@ export function App() {
       </main>
 
       <footer className="colophon">
-        <p>This page is static files. It has no server, sets no cookies and loads nothing from third parties. It talks only to the NEAR network and to the enclave.</p>
-        <p className="mono">{TELLER} · NEAR testnet · sandbox banks are fictional, and tokens are test tokens</p>
+        <div className="colophon-in">
+          <p>This site is static files stored on NEAR. There&rsquo;s no server of ours and no cookies. A strict browser policy lets this page talk only to NEAR, the enclave, and the attestation and quote services it uses.</p>
+          <p className="mono">{TELLER} · NEAR testnet · sandbox banks are fictional, and tokens are test tokens</p>
+        </div>
       </footer>
     </>
   );

@@ -3,6 +3,7 @@ import { DEMO, TELLER, TOKEN } from '../config';
 import { ATTACKS, randomOrderId, type Attack } from '../lib/attack';
 import { listOffers, prove, refusal, type Config, type Offer, type ProofResult } from '../lib/teller';
 import { bankForRail } from '../sandbox/banks';
+import { Icon } from './Art';
 import { Notice, Stamp } from './parts';
 
 type Outcome = { state: 'idle' } | { state: 'running' } | { state: 'done'; result: ProofResult } | { state: 'error'; message: string };
@@ -14,6 +15,7 @@ export function Cheat({ config }: { config: Config | null }) {
   const [offerId, setOfferId] = useState('0');
   const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
   const [payee] = useState('asha.rao@meridian');
+  const [trying, setTrying] = useState(false);
 
   useEffect(() => {
     listOffers()
@@ -58,30 +60,47 @@ export function Cheat({ config }: { config: Config | null }) {
   }
 
   async function runAll() {
+    setTrying(true);
     for (const attack of ATTACKS) await run(attack);
+    setTrying(false);
   }
+
+  const results = ATTACKS.map((a) => outcomes[a.id]).filter((o): o is Extract<Outcome, { state: 'done' }> => o?.state === 'done');
+  const refused = results.filter((o) => !o.result.ok).length;
 
   return (
     <>
-      <section className="hero hero-small">
-        <h1>Try to cheat the teller</h1>
-        <p>
-          Each button builds a real attack email in this browser, seals it, and sends it to the real enclave. Nothing is simulated. A refusal is
-          the enclave&rsquo;s own answer, and the reason shown is the code it returned.
-        </p>
-        <button className="primary" disabled={!ready} onClick={runAll}>Try them all</button>
+      <section className="hero hero-small hero-split">
+        <div>
+          <p className="eyebrow">Live attacks on the real enclave</p>
+          <h1>Try to cheat the teller</h1>
+          <p className="hero-lede">
+            Each button builds a real attack email in this browser, seals it, and sends it to the real enclave. Nothing is simulated. A refusal is
+            the enclave&rsquo;s own answer, and the reason shown is the code it returned.
+          </p>
+          <button className="primary" disabled={!ready || trying} onClick={runAll}>{trying ? 'Trying them all…' : 'Try them all'}</button>
+        </div>
+        <div className="score" role="status">
+          <p className="score-num"><strong>{refused}</strong> / {ATTACKS.length}</p>
+          <p className="score-label">attacks refused so far</p>
+          <div className="bar"><span style={{ width: `${(results.length / ATTACKS.length) * 100}%` }} /></div>
+        </div>
       </section>
 
       {!ready ? <Notice tone="warn">The enclave isn&rsquo;t connected on this deployment yet, so these can&rsquo;t run.</Notice> : null}
 
       <div className="attacks">
-        {ATTACKS.map((attack) => {
+        {ATTACKS.map((attack, i) => {
           const outcome = outcomes[attack.id] ?? { state: 'idle' };
+          const wasRefused = outcome.state === 'done' && !outcome.result.ok;
           return (
-            <article className="attack" key={attack.id}>
-              <h2>{attack.title}</h2>
+            <article className={`attack${wasRefused ? ' attack-refused' : ''}`} key={attack.id}>
+              <div className="attack-head">
+                <span className="num">{i + 1}</span>
+                <h2>{attack.title}</h2>
+              </div>
               <p>{attack.move}</p>
-              <p className="fine">Stopped by: {attack.defense}</p>
+              <span className="tag"><Icon name="shield" size={14} />Stopped by: {attack.defense}</span>
               {outcome.state === 'done' ? (
                 outcome.result.ok ? (
                   <Stamp kind="paid">Passed</Stamp>
@@ -89,14 +108,14 @@ export function Cheat({ config }: { config: Config | null }) {
                   <>
                     <Stamp kind="refused">Refused</Stamp>
                     <p className="reason">{refusal(outcome.result.code)}</p>
-                    <p className="fine mono">{outcome.result.code}</p>
+                    <span className="code">{outcome.result.code}</span>
                   </>
                 )
               ) : outcome.state === 'error' ? (
                 <p className="reason">{outcome.message}</p>
               ) : (
                 <button disabled={!ready || outcome.state === 'running'} onClick={() => run(attack)}>
-                  {outcome.state === 'running' ? 'Reading…' : 'Try it'}
+                  {outcome.state === 'running' ? <><span className="spin" aria-hidden="true" />Reading…</> : 'Try it'}
                 </button>
               )}
             </article>

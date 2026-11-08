@@ -83,7 +83,7 @@ If no proof arrives, the order expires and the USDC returns to the offer.
 
 - **Our servers:** there aren't any. The site is static files on FastFS, with no backend, database or logs of ours.
 - **The enclave:** [`Host`](enclave/src/host.rs) lists everything the enclave can do, and it has no storage call. Each run starts empty, and its memory ends with it. Errors are codes, never content.
-- **The browser:** an order lives in the page's memory. The site sets no cookies and uses no local storage.
+- **The browser:** an order lives in the page's memory. The site sets no cookies and uses no local storage. A Content-Security-Policy limits the page to the hosts it needs, and it also blocks the analytics script that the public FastFS gateway adds to pages it serves.
 - **The chain:** it keeps the order, the signed verdict and a nullifier. None of them contain the email, the bank or a name.
 
 Two things are outside our control. OutLayer records each run, and the email in that run is sealed to the enclave. NEAR AI keeps response signatures for later lookup. Its gateway only sees the email encrypted, and the model reads it inside its TEE.

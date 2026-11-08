@@ -17,6 +17,7 @@ const MIME: Record<string, string> = {
   css: 'text/css; charset=utf-8',
   json: 'application/json',
   wasm: 'application/wasm',
+  woff2: 'font/woff2',
 };
 
 const u32 = (n: number) => {
