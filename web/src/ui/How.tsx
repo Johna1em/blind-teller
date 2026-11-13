@@ -47,8 +47,8 @@ export function How() {
       <h2>Why AI, and why private</h2>
       <p>
         Proving a bank email with zero-knowledge circuits has been tried, and it works. But every bank needs its own circuit, and a template change breaks
-        it. ZKP2P moved away from email proofs for that reason. A private model reads any format in any language with no new code, and the secure
-        hardware means the convenience doesn&rsquo;t cost you your privacy.
+        it. A private model reads any format in any language with no new code, and the secure hardware means the convenience doesn&rsquo;t cost you
+        your privacy.
       </p>
 
       <h2>Why this helps NEAR</h2>

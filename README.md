@@ -3,6 +3,7 @@
 Buy crypto with an ordinary bank transfer. A private AI reads your bank's payment email inside secure hardware, and a NEAR contract releases the funds. Nobody else sees the email, and nothing about your bank reaches the chain.
 
 - **Hosted demo:** https://test.fastfs.io/blindteller.testnet/blindteller.testnet/index.html
+- **Demo video:** [demo/blind-teller-demo.mp4](demo/blind-teller-demo.mp4), 1:55, recorded on the hosted demo. The narration is an AI voice
 - **Track:** Privacy & Private AI (`privacy`), built at NEAR HACKATHON
 - **Status:** testnet prototype with fictional banks. See [What's real](#whats-real) for what runs live today.
 - **Licence:** MIT
@@ -249,6 +250,7 @@ Read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full list. The main on
 | `web/scripts` | Deploy, register models, host, verify, inspect |
 | `fixtures` | Test vectors shared across Rust and TypeScript |
 | `docs/THREAT_MODEL.md` | Trust assumptions, attacks and limits |
+| `demo/blind-teller-demo.mp4` | The demo video |
 
 ## Libraries and AI use
 
